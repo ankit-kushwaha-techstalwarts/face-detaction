@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Databases
+data/
+*.db
+*.sqlite
+
+# Uploads & Media (User photos, snapshots)
+uploads/
+exports/
+
+# Certificates (Security keys)
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Credentials / Security
+.env
+*.env
+key.pem
+cert.pem

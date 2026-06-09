@@ -1,0 +1,3476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FaceAttend — Govt Attendance System</title>
+<link rel="icon" type="image/png" href="/uploads/logo/favicon.png" id="favicon-link"/>
+<style>
+/* ─── Reset & Base ─────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1a56db;--blue-dark:#1e429f;--blue-light:#ebf5ff;
+  --green:#057a55;--green-light:#def7ec;
+  --red:#c81e1e;--red-light:#fde8e8;
+  --orange:#c27803;--orange-light:#fdf6b2;
+  --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;
+  --gray-400:#9ca3af;--gray-600:#4b5563;--gray-700:#374151;--gray-800:#1f2937;
+  --sidebar:240px;--header:60px;
+  --shadow:0 1px 4px rgba(0,0,0,.12);
+  --radius:8px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-50);color:var(--gray-800);display:flex;min-height:100vh}
+a{text-decoration:none;color:inherit}
+button{cursor:pointer;font:inherit}
+input,select,textarea{font:inherit}
+img{max-width:100%}
+/* ─── Sidebar ──────────────────────────────────────────────── */
+#sidebar{
+  width:var(--sidebar);min-height:100vh;background:var(--gray-800);
+  display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;
+  transition:transform .3s;
+}
+#sidebar .brand{
+  display:flex;align-items:center;gap:10px;
+  padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.08);
+}
+#sidebar .brand .logo{
+  width:36px;height:36px;background:var(--blue);border-radius:8px;
+  display:grid;place-items:center;font-size:18px;color:#fff;font-weight:700;
+}
+#sidebar .brand span{font-size:15px;font-weight:700;color:#fff;line-height:1.2}
+#sidebar .brand small{font-size:10px;color:var(--gray-400);display:block}
+nav{flex:1;padding:12px 0}
+nav a{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 18px;color:rgba(255,255,255,.7);font-size:14px;
+  transition:all .18s;border-left:3px solid transparent;
+}
+nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+nav a.active{background:rgba(26,86,219,.25);color:#fff;border-left-color:var(--blue)}
+nav a .icon{font-size:17px;width:22px;text-align:center}
+nav .section-label{
+  font-size:10px;font-weight:600;color:var(--gray-400);
+  text-transform:uppercase;letter-spacing:.08em;
+  padding:14px 18px 4px;
+}
+#sidebar footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08)}
+#sidebar footer small{color:var(--gray-400);font-size:11px}
+/* ─── Main ─────────────────────────────────────────────────── */
+#main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+header{
+  height:var(--header);background:#fff;border-bottom:1px solid var(--gray-200);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;position:sticky;top:0;z-index:90;
+}
+header h1{font-size:17px;font-weight:600;color:var(--gray-800)}
+header .right{display:flex;align-items:center;gap:12px}
+.badge-live{
+  background:var(--green-light);color:var(--green);
+  font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;
+  display:flex;align-items:center;gap:5px;
+}
+.badge-live::before{content:'';width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.page{display:none;padding:24px;flex:1}
+.page.active{display:block}
+/* ─── Cards / Stats ────────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{
+  background:#fff;border-radius:var(--radius);padding:20px;
+  box-shadow:var(--shadow);display:flex;align-items:center;gap:16px;
+}
+.stat-icon{width:48px;height:48px;border-radius:10px;display:grid;place-items:center;font-size:22px;flex-shrink:0}
+.stat-card h3{font-size:26px;font-weight:700;line-height:1}
+.stat-card p{font-size:12px;color:var(--gray-400);margin-top:3px}
+.card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-header h2{font-size:15px;font-weight:600}
+/* ─── Tables ───────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{background:var(--gray-50);color:var(--gray-600);font-weight:600;font-size:12px;
+   text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;text-align:left;
+   border-bottom:1px solid var(--gray-200)}
+td{padding:10px 12px;border-bottom:1px solid var(--gray-100);color:var(--gray-700)}
+tr:hover td{background:var(--gray-50)}
+.empty-row td{text-align:center;color:var(--gray-400);padding:32px}
+/* ─── Badges ───────────────────────────────────────────────── */
+.tag{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11.5px;font-weight:600}
+.tag-in{background:var(--green-light);color:var(--green)}
+.tag-out{background:var(--blue-light);color:var(--blue-dark)}
+.tag-absent{background:var(--red-light);color:var(--red)}
+.tag-late{background:var(--orange-light);color:var(--orange)}
+.tag-active{background:var(--green-light);color:var(--green)}
+.tag-inactive{background:var(--red-light);color:var(--red)}
+/* ─── Forms ────────────────────────────────────────────────── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:13px;font-weight:600;color:var(--gray-700)}
+.form-group input,.form-group select,.form-group textarea{
+  border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;
+  font-size:14px;transition:border-color .2s;background:#fff;
+}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,86,219,.1)}
+.form-group.full{grid-column:1/-1}
+/* ─── Buttons ──────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 18px;
+     border-radius:6px;font-size:14px;font-weight:500;border:none;transition:all .2s}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--blue-dark)}
+.btn-success{background:var(--green);color:#fff}.btn-success:hover{filter:brightness(.9)}
+.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{filter:brightness(.9)}
+.btn-outline{background:#fff;border:1px solid var(--gray-200);color:var(--gray-700)}
+.btn-outline:hover{background:var(--gray-50)}
+.btn-sm{padding:5px 12px;font-size:12.5px}
+.btn-xs{padding:3px 9px;font-size:11.5px}
+/* ─── Modal ────────────────────────────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:200;align-items:center;justify-content:center;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:#fff;border-radius:10px;padding:28px;width:560px;max-width:95vw;
+  max-height:90vh;overflow-y:auto;position:relative;
+  animation:slideIn .2s ease;
+}
+@keyframes slideIn{from{transform:translateY(-16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal h2{font-size:17px;font-weight:700;margin-bottom:20px}
+.modal-close{position:absolute;top:14px;right:14px;background:none;border:none;font-size:20px;color:var(--gray-400);cursor:pointer}
+/* ─── Search / Filter bar ──────────────────────────────────── */
+.filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.filter-bar input,.filter-bar select{
+  border:1px solid var(--gray-200);border-radius:6px;padding:7px 12px;
+  font-size:13.5px;background:#fff;min-width:140px;
+}
+/* ─── Photo upload ─────────────────────────────────────────── */
+.photo-upload{
+  border:2px dashed var(--gray-200);border-radius:var(--radius);
+  padding:24px;text-align:center;cursor:pointer;transition:all .2s;
+}
+.photo-upload:hover{border-color:var(--blue);background:var(--blue-light)}
+.photo-preview{
+  width:90px;height:90px;border-radius:50%;object-fit:cover;
+  border:3px solid var(--gray-200);
+}
+/* ─── Webcam ───────────────────────────────────────────────── */
+.enroll-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200)}
+.enroll-tab{
+  padding:9px 20px;font-size:13.5px;font-weight:500;background:none;border:none;
+  color:var(--gray-400);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;
+  transition:all .18s;
+}
+.enroll-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.enroll-panel{display:none}.enroll-panel.active{display:block}
+.webcam-wrap{
+  position:relative;background:#111;border-radius:var(--radius);overflow:hidden;
+  aspect-ratio:4/3;width:100%;
+}
+.webcam-wrap video,.webcam-wrap canvas{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+.webcam-wrap canvas{position:absolute;inset:0}
+/* face guide oval */
+.webcam-guide{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;
+}
+.webcam-guide svg{width:55%;opacity:.55}
+.webcam-corner{
+  position:absolute;top:8px;right:8px;
+  background:rgba(0,0,0,.55);color:#fff;font-size:11px;
+  padding:3px 8px;border-radius:4px;
+}
+.webcam-controls{display:flex;gap:8px;margin-top:10px;justify-content:center}
+.cam-captured-preview{
+  width:100%;border-radius:var(--radius);display:block;
+  border:2px solid var(--green);
+}
+/* ─── Camera grid ──────────────────────────────────────────── */
+.cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.cam-card{background:#fff;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.cam-feed{width:100%;height:175px;object-fit:cover;background:#111;display:block}
+.cam-info{padding:12px}
+.cam-info h3{font-size:14px;font-weight:600;margin-bottom:4px}
+.cam-info p{font-size:12px;color:var(--gray-400)}
+.cam-controls{display:flex;gap:6px;margin-top:10px}
+/* ─── Unknown faces grid ───────────────────────────────────── */
+.unk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.unk-card{background:#fff;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);position:relative}
+.unk-card img{width:100%;height:130px;object-fit:cover}
+.unk-card .info{padding:8px;font-size:11.5px;color:var(--gray-600)}
+.unk-card .unk-badge{
+  position:absolute;top:6px;right:6px;
+  background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;
+}
+.unk-reviewed{opacity:.5}
+/* ─── Chart placeholder ────────────────────────────────────── */
+.chart-area{height:200px;display:flex;align-items:flex-end;gap:6px;padding:8px 0}
+.chart-bar{flex:1;background:var(--blue);border-radius:4px 4px 0 0;position:relative;min-height:4px;transition:height .4s}
+.chart-bar:hover{background:var(--blue-dark)}
+.chart-bar .bar-label{
+  position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--gray-400);white-space:nowrap;
+}
+.chart-bar .bar-val{
+  position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:var(--gray-700);
+}
+/* ─── Toast ────────────────────────────────────────────────── */
+#toast-container{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{
+  background:#fff;border-radius:8px;padding:12px 18px;box-shadow:0 4px 16px rgba(0,0,0,.15);
+  font-size:13.5px;display:flex;align-items:center;gap:10px;min-width:260px;
+  animation:toastIn .25s ease;border-left:4px solid var(--blue);
+}
+.toast.success{border-left-color:var(--green)}
+.toast.error{border-left-color:var(--red)}
+@keyframes toastIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+/* ─── Pagination ───────────────────────────────────────────── */
+.pagination{display:flex;gap:4px;align-items:center;justify-content:flex-end;margin-top:12px}
+.pagination button{
+  padding:5px 12px;border:1px solid var(--gray-200);border-radius:5px;
+  background:#fff;font-size:13px;transition:all .18s;
+}
+.pagination button.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.pagination button:hover:not(.active){background:var(--gray-50)}
+/* ─── Progress bar ─────────────────────────────────────────── */
+.progress{height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden}
+.progress-bar{height:100%;background:var(--blue);border-radius:4px;transition:width .5s}
+/* ─── Misc ─────────────────────────────────────────────────── */
+.avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;background:var(--gray-200);flex-shrink:0}
+.flex{display:flex}.items-center{align-items:center}.gap-2{gap:8px}.gap-3{gap:12px}
+.text-sm{font-size:13px}.text-xs{font-size:11.5px}.text-gray{color:var(--gray-400)}
+.mt-1{margin-top:4px}.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}
+.mb-3{margin-bottom:12px}.mb-4{margin-bottom:16px}
+.w-full{width:100%}
+.divider{border:none;border-top:1px solid var(--gray-200);margin:16px 0}
+.loader{display:inline-block;width:18px;height:18px;border:2px solid var(--gray-200);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ─── Toggle switch ────────────────────────────────────────── */
+.toggle-switch{position:relative;display:inline-block;width:52px;height:28px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{
+  position:absolute;inset:0;background:var(--gray-200);border-radius:28px;
+  cursor:pointer;transition:background .25s;
+}
+.toggle-slider::before{
+  content:'';position:absolute;height:20px;width:20px;
+  left:4px;bottom:4px;background:#fff;border-radius:50%;
+  transition:transform .25s;box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.toggle-switch input:checked + .toggle-slider{background:var(--green)}
+.toggle-switch input:checked + .toggle-slider::before{transform:translateX(24px)}
+/* ─── Cam size buttons ─────────────────────────────────────── */
+.cam-size-btn{
+  padding:3px 10px;border-radius:5px;font-size:12px;font-weight:600;
+  border:none;background:transparent;color:var(--gray-400);cursor:pointer;
+  transition:all .18s;
+}
+.cam-size-btn.active,.cam-size-btn:hover{background:var(--blue);color:#fff}
+/* ─── Unknown face selection ──────────────────────────────── */
+.unk-card.selected{outline:3px solid var(--blue);outline-offset:2px}
+.unk-card .unk-checkbox{
+  position:absolute;top:6px;left:6px;
+  width:20px;height:20px;cursor:pointer;accent-color:var(--blue);
+  display:none;
+}
+.selection-mode .unk-card .unk-checkbox{display:block}
+.selection-mode .unk-card{cursor:pointer}
+</style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════ -->
+<aside id="sidebar">
+  <div class="brand">
+    <div class="logo">FA</div>
+    <div>
+      <span>FaceAttend</span>
+      <small>Attendance System</small>
+    </div>
+  </div>
+  <nav>
+    <div class="section-label">Main</div>
+    <a href="#" class="nav-link active" data-page="dashboard"><span class="icon">🏠</span> Dashboard</a>
+    <a href="#" class="nav-link" data-page="live"><span class="icon">📹</span> Live Cameras</a>
+    <div class="section-label nav-section-attendance">Attendance</div>
+    <a href="#" class="nav-link nav-role-manager" data-page="inout"><span class="icon">🕐</span> In/Out Records</a>
+    <a href="#" class="nav-link" data-page="today"><span class="icon">📋</span> Today's Summary</a>
+    <a href="#" class="nav-link nav-role-manager" data-page="unknown"><span class="icon">👤</span> Unknown Faces</a>
+    <div class="section-label nav-role-manager">Management</div>
+    <a href="#" class="nav-link nav-role-manager" data-page="users"><span class="icon">👥</span> User Enrollment</a>
+    <a href="#" class="nav-link nav-role-manager" data-page="reports"><span class="icon">📊</span> Reports</a>
+    <div class="section-label nav-role-manager">Compliance</div>
+    <a href="#" class="nav-link nav-role-manager" data-page="holidays"><span class="icon">📅</span> Holiday Calendar</a>
+    <div class="section-label nav-role-admin">System</div>
+    <a href="#" class="nav-link nav-role-admin" data-page="audit"><span class="icon">📋</span> Audit Log</a>
+    <a href="#" class="nav-link nav-role-admin" data-page="sysusers"><span class="icon">🔑</span> System Users</a>
+    <a href="#" class="nav-link nav-role-admin" data-page="settings"><span class="icon">⚙️</span> Settings</a>
+  </nav>
+  <footer>
+    <small>v1.0 &copy; 2025 Govt Dept</small>
+  </footer>
+</aside>
+
+<!-- ═══ MAIN ════════════════════════════════════════════════════════ -->
+<div id="main">
+  <header>
+    <div style="display:flex;align-items:center;gap:10px">
+      <img id="header-logo" src="" alt="" style="height:32px;display:none;border-radius:4px;object-fit:contain"/>
+      <h1 id="page-title">Dashboard</h1>
+    </div>
+    <div class="right">
+      <div class="badge-live" id="live-badge">System Live</div>
+      <span id="clock" style="font-size:13px;color:var(--gray-600)"></span>
+      <span id="header-user" style="font-size:13px;font-weight:600;color:var(--gray-700)"></span>
+      <span id="role-badge" style="font-size:11px;padding:2px 10px;border-radius:20px;font-weight:600;background:var(--blue-light);color:var(--blue-dark)"></span>
+      <button onclick="doLogout()" class="btn btn-outline btn-sm" style="font-size:12px">🚪 Logout</button>
+    </div>
+  </header>
+
+  <!-- ── DASHBOARD ──────────────────────────────────────────────── -->
+  <div class="page active" id="page-dashboard">
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-card"><div class="stat-icon" style="background:#dbeafe">👥</div><div><h3 id="s-total">—</h3><p>Total Employees</p></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--green-light)">✅</div><div><h3 id="s-present">—</h3><p>Present Today</p></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--red-light)">❌</div><div><h3 id="s-absent">—</h3><p>Absent Today</p></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--orange-light)">⏰</div><div><h3 id="s-late">—</h3><p>Late Arrivals</p></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#fce7f3">🚨</div><div><h3 id="s-unknown">—</h3><p>Unknown Faces</p></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card">
+        <div class="card-header"><h2>📈 Weekly Attendance Trend</h2></div>
+        <div class="chart-area" id="trend-chart"></div>
+        <div style="height:22px"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>🏢 Department Breakdown</h2></div>
+        <div id="dept-breakdown"></div>
+      </div>
+    </div>
+
+    <!-- Row 3: Hourly heatmap + Top late arrivals -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="card">
+        <div class="card-header"><h2>⏰ Today's Punch-in by Hour</h2></div>
+        <div id="hourly-chart" class="chart-area" style="align-items:flex-end"></div>
+        <div style="height:22px"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>🔴 Top Late Arrivals (This Month)</h2></div>
+        <div id="top-late-list"></div>
+      </div>
+    </div>
+
+    <!-- Row 4: Camera status + Unknown alerts -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="card">
+        <div class="card-header">
+          <h2>📹 Camera Status</h2>
+          <a href="#" class="btn btn-outline btn-sm" onclick="navTo('live')">View All</a>
+        </div>
+        <div id="cam-status-widget"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>🚨 Unknown Alerts Today</h2>
+          <a href="#" class="btn btn-outline btn-sm" onclick="navTo('unknown')">View All</a>
+        </div>
+        <div id="unknown-alerts-widget" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>🕐 Recent Activity</h2><button class="btn btn-outline btn-sm" onclick="loadDashboard()">🔄 Refresh</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Employee</th><th>Emp ID</th><th>Type</th><th>Time</th><th>Confidence</th></tr></thead>
+          <tbody id="recent-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LIVE CAMERAS ───────────────────────────────────────────── -->
+  <div class="page" id="page-live">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <!-- Feed size selector -->
+      <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:4px 6px">
+        <span style="font-size:12px;color:var(--gray-600);margin-right:2px">Feed Size:</span>
+        <button class="cam-size-btn active" data-cols="4" onclick="setCamSize(this,4)">XS</button>
+        <button class="cam-size-btn"        data-cols="3" onclick="setCamSize(this,3)">S</button>
+        <button class="cam-size-btn"        data-cols="2" onclick="setCamSize(this,2)">M</button>
+        <button class="cam-size-btn"        data-cols="1" onclick="setCamSize(this,1)">L</button>
+      </div>
+      <!-- Per-camera height -->
+      <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:4px 10px">
+        <span style="font-size:12px;color:var(--gray-600)">Height:</span>
+        <input type="range" id="cam-height-slider" min="150" max="500" value="175" step="25"
+               style="width:90px;cursor:pointer" oninput="updateCamHeight(this.value)"/>
+        <span id="cam-height-val" style="font-size:12px;color:var(--gray-700);min-width:38px">175px</span>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="loadCamGrid()">🔄 Refresh</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddCamera()">➕ Add Camera</button>
+    </div>
+    <div class="cam-grid" id="cam-grid"></div>
+  </div>
+
+  <!-- ── IN/OUT RECORDS ─────────────────────────────────────────── -->
+  <div class="page" id="page-inout">
+    <div class="card">
+      <div class="filter-bar">
+        <input type="date" id="att-from" />
+        <input type="date" id="att-to" />
+        <select id="att-dept"><option value="">All Departments</option></select>
+        <select id="att-type"><option value="">IN & OUT</option><option value="IN">IN Only</option><option value="OUT">OUT Only</option></select>
+        <input type="text" id="att-search" placeholder="🔍 Search name / ID…" style="min-width:180px"/>
+        <button class="btn btn-primary btn-sm" onclick="loadAttendance()">Search</button>
+        <button class="btn btn-outline btn-sm" onclick="exportAttendance()">⬇ Export CSV</button>
+        <button class="btn btn-success btn-sm" onclick="openManualAttModal()">➕ Manual Entry</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Employee</th><th>Emp ID</th><th>Dept</th><th>Type</th><th>Time</th><th>Camera</th><th>Confidence</th><th>Snapshot</th><th></th></tr></thead>
+          <tbody id="att-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="att-pagination"></div>
+    </div>
+  </div>
+
+  <!-- ── TODAY SUMMARY ──────────────────────────────────────────── -->
+  <div class="page" id="page-today">
+    <div class="card">
+      <div class="filter-bar">
+        <select id="today-dept"><option value="">All Departments</option></select>
+        <button class="btn btn-primary btn-sm" onclick="loadTodaySummary()">🔄 Refresh</button>
+        <button class="btn btn-outline btn-sm" onclick="exportToday()">⬇ Export CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>First IN</th><th>Last OUT</th><th>Status</th></tr></thead>
+          <tbody id="today-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── UNKNOWN FACES ──────────────────────────────────────────── -->
+  <div class="page" id="page-unknown">
+    <!-- Detection ON/OFF banner -->
+    <div id="unk-detect-banner" style="display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:8px;box-shadow:var(--shadow);padding:14px 20px;margin-bottom:16px;gap:16px">
+      <div>
+        <p style="font-size:14px;font-weight:600;color:var(--gray-800)">Unknown Face Detection</p>
+        <p class="text-xs text-gray" style="margin-top:2px">When ON, unrecognised faces from CCTV will be captured and stored here.</p>
+      </div>
+      <label class="toggle-switch" title="Toggle unknown face detection">
+        <input type="checkbox" id="unk-detect-toggle" onchange="toggleUnknownDetection(this)"/>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="card">
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <select id="unk-filter"><option value="">All</option><option value="0">Unreviewed</option><option value="1">Reviewed</option></select>
+        <button class="btn btn-primary btn-sm" onclick="loadUnknown()">🔄 Refresh</button>
+        <span id="unk-count" class="text-sm text-gray"></span>
+      </div>
+      <!-- Multi-select toolbar -->
+      <div id="unk-selection-bar" style="display:none;background:var(--blue-light);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="unk-sel-count" class="text-sm" style="font-weight:600;color:var(--blue-dark)">0 selected</span>
+        <button class="btn btn-outline btn-sm" onclick="selectAllUnknown()">☑ Select All</button>
+        <button class="btn btn-outline btn-sm" onclick="selectNoneUnknown()">☐ Deselect All</button>
+        <button class="btn btn-danger btn-sm" id="btn-bulk-delete" onclick="bulkDeleteUnknown()" disabled>🗑 Delete Selected</button>
+        <button class="btn btn-outline btn-sm" onclick="markAllReviewed()">✓ Mark Selected Reviewed</button>
+      </div>
+      <!-- Toggle selection mode -->
+      <div style="margin-bottom:10px">
+        <button class="btn btn-outline btn-sm" id="btn-sel-mode" onclick="toggleSelectionMode()">☑ Select Multiple</button>
+      </div>
+      <div class="unk-grid" id="unk-grid"></div>
+      <div class="pagination" id="unk-pagination"></div>
+    </div>
+  </div>
+
+  <!-- ── USER ENROLLMENT ────────────────────────────────────────── -->
+  <div class="page" id="page-users">
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="user-search" placeholder="🔍 Search name / ID / designation…" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:13.5px;min-width:240px"/>
+      <select id="user-dept-filter" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:13.5px">
+        <option value="">All Departments</option>
+      </select>
+      <select id="user-active-filter" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:13.5px">
+        <option value="all">All Status</option>
+        <option value="1" selected>Active Only</option>
+        <option value="0">Inactive Only</option>
+      </select>
+      <span id="users-total" class="text-sm text-gray"></span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="openAddUserModal()">➕ Add Employee</button>
+        <button class="btn btn-outline" onclick="openImportModal()">⬆ Import CSV</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Photo</th><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Contact</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="users-pagination" style="padding:12px 16px"></div>
+    </div>
+  </div>
+
+  <!-- ── REPORTS ────────────────────────────────────────────────── -->
+  <div class="page" id="page-reports">
+    <!-- Report type tabs -->
+    <div style="display:flex;gap:0;margin-bottom:20px;background:#fff;border-radius:8px;box-shadow:var(--shadow);overflow:hidden">
+      <button class="enroll-tab active" id="rtab-attendance" onclick="switchReportTab('attendance')" style="flex:1;border-radius:0;padding:12px">📊 Attendance</button>
+      <button class="enroll-tab" id="rtab-monthly"    onclick="switchReportTab('monthly')"    style="flex:1;border-radius:0;padding:12px">📅 Monthly</button>
+      <button class="enroll-tab" id="rtab-late"       onclick="switchReportTab('late')"       style="flex:1;border-radius:0;padding:12px">⏰ Late Arrivals</button>
+      <button class="enroll-tab" id="rtab-absent"     onclick="switchReportTab('absent')"     style="flex:1;border-radius:0;padding:12px">❌ Absentees</button>
+      <button class="enroll-tab" id="rtab-hours"      onclick="switchReportTab('hours')"      style="flex:1;border-radius:0;padding:12px">🕐 Working Hours</button>
+      <button class="enroll-tab" id="rtab-employee"   onclick="switchReportTab('employee')"   style="flex:1;border-radius:0;padding:12px">👤 Employee History</button>
+    </div>
+
+    <!-- Attendance Report -->
+    <div id="rpanel-attendance" class="enroll-panel active">
+      <div class="card mb-4">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="form-group"><label>From Date</label><input type="date" id="rep-from"/></div>
+          <div class="form-group"><label>To Date</label><input type="date" id="rep-to"/></div>
+          <div class="form-group"><label>Department</label><select id="rep-dept"><option value="">All</option></select></div>
+          <div class="form-group"><label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="loadReport()">Generate</button>
+              <button class="btn btn-outline" onclick="exportReport()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table><thead><tr><th>Emp ID</th><th>Name</th><th>Dept</th><th>Date</th><th>First IN</th><th>Last OUT</th><th>Status</th></tr></thead>
+          <tbody id="report-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Summary -->
+    <div id="rpanel-monthly" class="enroll-panel">
+      <div class="card mb-4">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group"><label>Month</label><input type="month" id="rep-month" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px"/></div>
+          <div class="form-group"><label>Department</label><select id="monthly-dept" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px"><option value="">All</option></select></div>
+          <div style="display:flex;gap:8px;align-self:flex-end">
+            <button class="btn btn-primary" onclick="loadMonthly()">Generate</button>
+            <button class="btn btn-outline" onclick="exportMonthly()">⬇ CSV</button>
+          </div>
+        </div>
+      </div>
+      <!-- Summary stats bar -->
+      <div id="monthly-meta" style="display:none" class="card mb-4" style="background:var(--blue-light)">
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div><p class="text-xs text-gray">Working Days</p><h3 id="mm-wdays" style="font-size:22px;font-weight:700">—</h3></div>
+          <div><p class="text-xs text-gray">Public Holidays</p><h3 id="mm-hdays" style="font-size:22px;font-weight:700;color:var(--orange)">—</h3></div>
+          <div><p class="text-xs text-gray">Total Employees</p><h3 id="mm-emps" style="font-size:22px;font-weight:700">—</h3></div>
+          <div id="mm-holidays-list" style="flex:1;font-size:12px;color:var(--gray-600);align-self:center"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Working Days</th><th>Present</th><th>Absent</th><th>Late</th><th>Attendance %</th></tr></thead>
+            <tbody id="monthly-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Late Arrivals -->
+    <div id="rpanel-late" class="enroll-panel">
+      <div class="card mb-4">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="form-group"><label>From Date</label><input type="date" id="late-from"/></div>
+          <div class="form-group"><label>To Date</label><input type="date" id="late-to"/></div>
+          <div class="form-group"><label>Department</label><select id="late-dept"><option value="">All</option></select></div>
+          <div class="form-group"><label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="loadLateReport()">Generate</button>
+              <button class="btn btn-outline" onclick="exportLateReport()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:10px" id="late-summary"></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Date</th><th>Emp ID</th><th>Name</th><th>Dept</th><th>First IN</th><th>Deadline</th><th>Minutes Late</th></tr></thead>
+          <tbody id="late-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Absentees -->
+    <div id="rpanel-absent" class="enroll-panel">
+      <div class="card mb-4">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="form-group"><label>From Date</label><input type="date" id="absent-from"/></div>
+          <div class="form-group"><label>To Date</label><input type="date" id="absent-to"/></div>
+          <div class="form-group"><label>Department</label><select id="absent-dept"><option value="">All</option></select></div>
+          <div class="form-group"><label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="loadAbsentReport()">Generate</button>
+              <button class="btn btn-outline" onclick="exportAbsentReport()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:10px" id="absent-summary"></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Date</th><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th></tr></thead>
+          <tbody id="absent-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working Hours -->
+    <div id="rpanel-hours" class="enroll-panel">
+      <div class="card mb-4">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="form-group"><label>From Date</label><input type="date" id="hours-from"/></div>
+          <div class="form-group"><label>To Date</label><input type="date" id="hours-to"/></div>
+          <div class="form-group"><label>Department</label><select id="hours-dept"><option value="">All</option></select></div>
+          <div class="form-group"><label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="loadHoursReport()">Generate</button>
+              <button class="btn btn-outline" onclick="exportHoursReport()">⬇ CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table><thead><tr><th>Date</th><th>Emp ID</th><th>Name</th><th>Dept</th><th>First IN</th><th>Last OUT</th><th>Hours Worked</th><th>Overtime</th><th>Status</th></tr></thead>
+          <tbody id="hours-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Individual Employee History -->
+    <div id="rpanel-employee" class="enroll-panel">
+      <div class="card mb-4">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="form-group"><label>Employee</label>
+            <select id="emp-hist-uid"><option value="">Select employee…</option></select>
+          </div>
+          <div class="form-group"><label>From Date</label><input type="date" id="emp-hist-from"/></div>
+          <div class="form-group"><label>To Date</label><input type="date" id="emp-hist-to"/></div>
+          <div class="form-group"><label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="loadEmpHistory()">View History</button>
+          </div>
+        </div>
+      </div>
+      <div id="emp-hist-profile" style="display:none" class="card mb-4">
+        <div style="display:flex;gap:16px;align-items:center">
+          <img id="ehp-photo" class="photo-preview" src="" onerror="this.style.display='none'"/>
+          <div>
+            <h3 id="ehp-name" style="font-size:17px;font-weight:700"></h3>
+            <p id="ehp-meta" class="text-sm text-gray"></p>
+            <p id="ehp-summary" class="text-sm mt-1" style="color:var(--blue)"></p>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>📋 Daily Summary</h2></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Date</th><th>First IN</th><th>Last OUT</th><th>Total Punches</th></tr></thead>
+          <tbody id="emp-hist-daily"></tbody></table>
+        </div>
+      </div>
+      <div class="card mt-3">
+        <div class="card-header"><h2>🕐 All Punch Records</h2></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Date & Time</th><th>Type</th><th>Camera</th><th>Confidence</th><th>Snapshot</th></tr></thead>
+          <tbody id="emp-hist-records"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOLIDAY CALENDAR ──────────────────────────────────────── -->
+  <div class="page" id="page-holidays">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+      <select id="hol-year" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:13.5px"></select>
+      <button class="btn btn-outline btn-sm" onclick="loadHolidays()">🔄 Refresh</button>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm nav-role-manager" onclick="openAddHoliday()">➕ Add Holiday</button>
+        <button class="btn btn-outline btn-sm nav-role-manager" onclick="seedIndiaHolidays()">🇮🇳 Seed 2025 Govt Holidays</button>
+      </div>
+    </div>
+
+    <!-- Holiday type legend -->
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <span class="tag" style="background:#fde8e8;color:#c81e1e">🔴 National Holiday</span>
+      <span class="tag" style="background:#fdf6b2;color:#c27803">🟡 State Holiday</span>
+      <span class="tag" style="background:#ebf5ff;color:#1a56db">🔵 Restricted Holiday</span>
+      <span class="tag" style="background:#def7ec;color:#057a55">🟢 Office Closure</span>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Day</th><th>Holiday Name</th><th>Type</th><th class="nav-role-manager">Actions</th></tr></thead>
+          <tbody id="hol-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Monthly holiday impact summary -->
+    <div class="card mt-4" id="hol-summary-card" style="display:none">
+      <div class="card-header"><h2>📊 Monthly Working Day Summary</h2></div>
+      <div id="hol-monthly-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px"></div>
+    </div>
+  </div>
+
+  <!-- ── AUDIT LOG (admin only) ────────────────────────────────── -->
+  <div class="page" id="page-audit">
+    <div class="card mb-4">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr auto">
+        <div class="form-group"><label>From Date</label><input type="date" id="audit-from"/></div>
+        <div class="form-group"><label>To Date</label><input type="date" id="audit-to"/></div>
+        <div class="form-group"><label>User</label>
+          <select id="audit-user"><option value="">All Users</option></select>
+        </div>
+        <div class="form-group"><label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="loadAuditLog()">Search</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action type colour key -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <span class="tag tag-in">LOGIN</span>
+      <span class="tag tag-absent">LOGIN_FAILED</span>
+      <span class="tag tag-late">EDIT / DELETE</span>
+      <span class="tag" style="background:var(--gray-100);color:var(--gray-600)">OTHER</span>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date &amp; Time</th><th>User</th><th>Role</th><th>Action</th><th>Target</th><th>Detail</th><th>IP Address</th></tr></thead>
+          <tbody id="audit-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="audit-pagination" style="padding:12px 16px"></div>
+    </div>
+  </div>
+
+  <!-- ── SYSTEM USERS (admin only) ──────────────────────────────── -->
+  <div class="page" id="page-sysusers">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+      <h2 style="font-size:15px;font-weight:600;flex:1">🔑 System User Management</h2>
+      <button class="btn btn-primary btn-sm" onclick="openAddSysUser()">➕ Add User</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="sysusers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card mt-4" style="background:var(--blue-light);border:1px solid rgba(26,86,219,.2)">
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--blue-dark)">ℹ️ Role Permissions</h3>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:13px">
+        <div><strong>🔴 Admin</strong><br>Full access — manage all data, system users, settings, cameras</div>
+        <div><strong>🟡 Manager</strong><br>Dashboard, reports, enroll employees, view/manage attendance, cameras</div>
+        <div><strong>🟢 Guard</strong><br>Live cameras + today's summary only — read-only, no reports</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS ───────────────────────────────────────────────── -->
+  <div class="page" id="page-settings">
+    <!-- Settings tabs -->
+    <div style="display:flex;gap:0;margin-bottom:20px;background:#fff;border-radius:8px;box-shadow:var(--shadow);overflow:hidden">
+      <button class="enroll-tab active" id="stab-general"    onclick="switchSettingsTab('general')"    style="flex:1;border-radius:0;padding:11px">🏛 Organisation</button>
+      <button class="enroll-tab"        id="stab-theme"      onclick="switchSettingsTab('theme')"      style="flex:1;border-radius:0;padding:11px">🎨 Theme</button>
+      <button class="enroll-tab"        id="stab-attendance" onclick="switchSettingsTab('attendance')" style="flex:1;border-radius:0;padding:11px">🕐 Attendance</button>
+      <button class="enroll-tab"        id="stab-recognition"onclick="switchSettingsTab('recognition')" style="flex:1;border-radius:0;padding:11px">🤖 Recognition</button>
+      <button class="enroll-tab"        id="stab-cameras"    onclick="switchSettingsTab('cameras')"    style="flex:1;border-radius:0;padding:11px">📹 Cameras</button>
+      <button class="enroll-tab"        id="stab-compliance" onclick="switchSettingsTab('compliance')" style="flex:1;border-radius:0;padding:11px">🔒 Compliance</button>
+      <button class="enroll-tab"        id="stab-account"    onclick="switchSettingsTab('account')"    style="flex:1;border-radius:0;padding:11px">👤 Account</button>
+      <button class="enroll-tab"        id="stab-sync"       onclick="switchSettingsTab('sync')"       style="flex:1;border-radius:0;padding:11px">☁ Sync</button>
+    </div>
+
+    <!-- ── General / Organisation ── -->
+    <div id="spanel-general" class="enroll-panel active">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-header"><h2>🏛 Organisation Info</h2></div>
+          <!-- Logo Upload -->
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--gray-200)">
+            <img id="logo-preview" src="" alt="Logo"
+                 style="width:72px;height:72px;border-radius:10px;object-fit:contain;background:var(--gray-100);border:2px solid var(--gray-200);display:none"/>
+            <div id="logo-placeholder-icon" style="width:72px;height:72px;border-radius:10px;background:var(--gray-100);border:2px dashed var(--gray-300);display:flex;align-items:center;justify-content:center;font-size:24px">🏛</div>
+            <div>
+              <p style="font-size:13px;font-weight:600;margin-bottom:4px">Organisation Logo</p>
+              <p class="text-xs text-gray mb-2">Shown in header. PNG recommended, transparent background.</p>
+              <div style="display:flex;gap:6px">
+                <input type="file" id="logo-file" accept="image/*" style="display:none" onchange="uploadLogo(this)"/>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('logo-file').click()">📂 Upload</button>
+                <button class="btn btn-outline btn-sm" id="btn-remove-logo" onclick="removeLogo()" style="color:var(--red);display:none">✕ Remove</button>
+              </div>
+            </div>
+          </div>
+          <div id="settings-general"></div>
+          <button class="btn btn-primary mt-3" onclick="saveSettings('general')">💾 Save Organisation</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>🏢 Departments</h2></div>
+          <div id="settings-depts"></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <input type="text" id="new-dept" placeholder="New department…" style="border:1px solid var(--gray-200);border-radius:6px;padding:7px 12px;font-size:13px;flex:1"/>
+            <button class="btn btn-primary btn-sm" onclick="addDept()">Add</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>📥 Bulk Import Employees</h2></div>
+          <p class="text-sm text-gray mb-3">CSV columns: <code>emp_id, name, department, designation, email, phone</code></p>
+          <div class="photo-upload" id="import-drop" onclick="document.getElementById('import-file').click()">
+            <div style="font-size:28px">📂</div>
+            <p class="text-sm mt-2">Click to select CSV file</p>
+            <input type="file" id="import-file" accept=".csv" style="display:none" onchange="importCSV(this)"/>
+          </div>
+          <div id="import-result" class="mt-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Theme ── -->
+    <div id="spanel-theme" class="enroll-panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-header"><h2>🎨 Colour Scheme</h2></div>
+          <p class="text-sm text-gray mb-4">Changes take effect immediately and are saved to the database.</p>
+          <div class="form-group mb-3">
+            <label>Primary Colour</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="theme-primary" value="#1a56db" style="width:48px;height:38px;border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;padding:2px"/>
+              <input type="text"  id="theme-primary-hex" placeholder="#1a56db" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:14px;flex:1" oninput="syncColorInput('primary')"/>
+              <div id="theme-primary-swatch" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--gray-200)"></div>
+            </div>
+          </div>
+          <div class="form-group mb-3">
+            <label>Accent / Success Colour</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="color" id="theme-accent" value="#057a55" style="width:48px;height:38px;border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;padding:2px"/>
+              <input type="text"  id="theme-accent-hex" placeholder="#057a55" style="border:1px solid var(--gray-200);border-radius:6px;padding:8px 12px;font-size:14px;flex:1" oninput="syncColorInput('accent')"/>
+              <div id="theme-accent-swatch" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--gray-200)"></div>
+            </div>
+          </div>
+
+          <!-- Preset palettes -->
+          <p style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Quick Presets</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button class="btn btn-outline btn-sm" onclick="applyPreset('#1a56db','#057a55')">🔵 Default Blue</button>
+            <button class="btn btn-outline btn-sm" onclick="applyPreset('#7e3af2','#057a55')">🟣 Purple</button>
+            <button class="btn btn-outline btn-sm" onclick="applyPreset('#c81e1e','#c27803')">🔴 Red-Gold (Govt)</button>
+            <button class="btn btn-outline btn-sm" onclick="applyPreset('#1e429f','#046c4e')">🏛 Deep Navy</button>
+            <button class="btn btn-outline btn-sm" onclick="applyPreset('#374151','#1a56db')">⬛ Charcoal</button>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>App / Browser Title</label>
+            <input type="text" id="theme-org-title" placeholder="FaceAttend — Dept Name"/>
+          </div>
+          <div class="form-group mb-3">
+            <label>Organisation Name (Header)</label>
+            <input type="text" id="theme-org-name" placeholder="Government Department"/>
+          </div>
+          <button class="btn btn-primary mt-2" onclick="saveTheme()">💾 Save Theme</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2>🖼 Favicon</h2></div>
+          <p class="text-sm text-gray mb-3">Shown as the browser tab icon. Use a square PNG or ICO (32×32 px recommended).</p>
+          <div style="text-align:center;margin-bottom:16px">
+            <img id="favicon-preview" style="width:64px;height:64px;object-fit:contain;border-radius:8px;border:2px solid var(--gray-200);padding:4px;background:#fff" src="" onerror="this.style.display='none'"/>
+          </div>
+          <div class="photo-upload mb-3" onclick="document.getElementById('favicon-file').click()">
+            <div style="font-size:28px">🖼</div>
+            <p class="text-sm mt-2">Click to upload favicon</p>
+            <p class="text-xs text-gray">PNG or ICO, square, 32–256 px</p>
+            <input type="file" id="favicon-file" accept="image/png,image/x-icon,image/vnd.microsoft.icon" style="display:none" onchange="uploadFavicon(this)"/>
+          </div>
+          <div id="favicon-msg"></div>
+
+          <hr class="divider"/>
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Live Theme Preview</h3>
+          <div id="theme-preview" style="background:var(--gray-50);border-radius:8px;padding:12px;border:1px solid var(--gray-200)">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <div id="prev-primary" style="width:32px;height:32px;border-radius:6px;background:var(--blue)"></div>
+              <span style="font-size:13px;font-weight:600">Primary</span>
+              <div id="prev-accent"  style="width:32px;height:32px;border-radius:6px;background:var(--green);margin-left:8px"></div>
+              <span style="font-size:13px;font-weight:600">Accent</span>
+            </div>
+            <button class="btn btn-primary btn-sm" style="pointer-events:none">Sample Button</button>
+            <button class="btn btn-success btn-sm" style="pointer-events:none;margin-left:6px">Success</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Attendance ── -->
+    <div id="spanel-attendance" class="enroll-panel">
+      <div class="card" style="max-width:600px">
+        <div class="card-header"><h2>🕐 Attendance Settings</h2></div>
+        <div id="settings-attendance"></div>
+        <button class="btn btn-primary mt-3" onclick="saveSettings('attendance')">💾 Save</button>
+      </div>
+    </div>
+
+    <!-- ── Recognition ── -->
+    <div id="spanel-recognition" class="enroll-panel">
+      <div class="card" style="max-width:600px">
+        <div class="card-header"><h2>🤖 Recognition Settings</h2></div>
+        <div id="settings-recognition"></div>
+        <button class="btn btn-primary mt-3" onclick="saveSettings('recognition')">💾 Save</button>
+      </div>
+    </div>
+
+    <!-- ── Cameras ── -->
+    <div id="spanel-cameras" class="enroll-panel">
+      <div class="card">
+        <div class="card-header">
+          <h2>📹 Camera Management</h2>
+          <button class="btn btn-primary btn-sm" onclick="openAddCamera()">➕ Add Camera</button>
+        </div>
+        <div id="settings-cameras"></div>
+      </div>
+    </div>
+
+    <!-- ── Compliance ── -->
+    <div id="spanel-compliance" class="enroll-panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-header"><h2>🔒 Security &amp; Compliance</h2></div>
+          <div id="settings-compliance"></div>
+          <button class="btn btn-primary mt-3" onclick="saveSettings('compliance')">💾 Save</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>📋 Compliance Information</h2></div>
+          <div style="font-size:13px;line-height:1.7;color:var(--gray-700)">
+            <p><strong>Session Timeout</strong> — Auto-logs out inactive users. Set 0 to disable. Recommended: 30 minutes for government deployments.</p>
+            <p class="mt-2"><strong>Data Retention</strong> — Attendance records older than this limit can be archived. Default: 1095 days (3 years).</p>
+            <p class="mt-2"><strong>Audit Log</strong> — All admin actions (login, edit, delete) are recorded automatically and cannot be disabled.</p>
+            <p class="mt-2"><strong>Password Policy</strong> — Enforces minimum length and complexity for all system users.</p>
+            <p class="mt-2"><strong>Failed Login Limit</strong> — Accounts are flagged after N consecutive failures. Set 0 to disable lockout.</p>
+          </div>
+          <div class="card mt-3" style="background:var(--green-light);border:1px solid rgba(5,122,85,.2);padding:14px">
+            <p style="font-size:13px;color:var(--green);font-weight:600">✅ Audit logging is always active</p>
+            <p class="text-xs mt-1" style="color:var(--green)">Every login, data change, and configuration update is logged with user, IP, and timestamp.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Account ── -->
+    <div id="spanel-account" class="enroll-panel">
+      <div class="card" style="max-width:480px">
+        <div class="card-header"><h2>🔐 Change Password</h2></div>
+        <div class="form-group mb-3">
+          <label>Current Password</label>
+          <input type="password" id="pw-current" placeholder="Current password"/>
+        </div>
+        <div class="form-group mb-3">
+          <label>New Password</label>
+          <input type="password" id="pw-new" placeholder="Min 8 characters, 1 uppercase, 1 digit"/>
+        </div>
+        <div class="form-group mb-3">
+          <label>Confirm New Password</label>
+          <input type="password" id="pw-confirm" placeholder="Repeat new password"/>
+        </div>
+        <div id="pw-msg" class="mt-2"></div>
+        <button class="btn btn-primary mt-3" onclick="changePassword()">🔐 Update Password</button>
+      </div>
+    </div>
+
+    <!-- ── Cloud Sync ── -->
+    <div id="spanel-sync" class="enroll-panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+        <!-- Config card -->
+        <div class="card">
+          <div class="card-header"><h2>☁ Cloud Sync Configuration</h2></div>
+          <p class="text-sm text-gray mb-3">
+            All face recognition runs locally. Attendance records are pushed to
+            the cloud portal every N seconds. Employee enrollments made on the
+            cloud are pulled back automatically.
+          </p>
+
+          <div class="form-group mb-3">
+            <label>Enable Cloud Sync</label>
+            <select data-cat="sync" data-key="sync_enabled" style="width:100%;border:1px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-size:13px">
+              <option value="0">Disabled</option>
+              <option value="1">Enabled</option>
+            </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>Cloud Portal URL</label>
+            <input type="url" data-cat="sync" data-key="cloud_api_url"
+                   placeholder="https://your-portal.example.com"
+                   style="width:100%;border:1px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-size:13px"/>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>Cloud API Key</label>
+            <input type="password" data-cat="sync" data-key="cloud_api_key"
+                   placeholder="Shared secret (set same on cloud portal)"
+                   style="width:100%;border:1px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-size:13px"/>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>Site / Branch ID</label>
+            <input type="text" data-cat="sync" data-key="site_id"
+                   placeholder="e.g. hq, branch-mumbai"
+                   style="width:100%;border:1px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-size:13px"/>
+          </div>
+
+          <div class="form-group mb-3">
+            <label>Sync Interval (seconds)</label>
+            <input type="number" min="10" max="3600" data-cat="sync" data-key="sync_interval"
+                   style="width:100%;border:1px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-size:13px"/>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn btn-primary btn-sm" onclick="saveSettings('sync')">💾 Save</button>
+            <button class="btn btn-outline btn-sm" onclick="testSyncConnection()">🔗 Test Connection</button>
+          </div>
+          <div id="sync-test-msg" class="mt-2" style="font-size:13px"></div>
+        </div>
+
+        <!-- Status card -->
+        <div class="card">
+          <div class="card-header" style="display:flex;align-items:center;gap:8px">
+            <h2 style="flex:1">📊 Sync Status</h2>
+            <button class="btn btn-outline btn-xs" onclick="loadSyncLog()">↻ Refresh</button>
+          </div>
+
+          <div id="sync-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px;text-align:center">
+              <div class="text-lg font-bold" id="sync-pending-att">—</div>
+              <div class="text-xs text-gray">Pending Attendance</div>
+            </div>
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px;text-align:center">
+              <div class="text-lg font-bold" id="sync-pending-unk">—</div>
+              <div class="text-xs text-gray">Pending Unknown Faces</div>
+            </div>
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px;text-align:center">
+              <div class="text-lg font-bold" id="sync-last-push">—</div>
+              <div class="text-xs text-gray">Last Push</div>
+            </div>
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px;text-align:center">
+              <div class="text-lg font-bold" id="sync-last-pull">—</div>
+              <div class="text-xs text-gray">Last Employee Pull</div>
+            </div>
+          </div>
+
+          <p class="text-xs text-gray mb-2">Recent sync events:</p>
+          <div id="sync-log-list" style="max-height:260px;overflow-y:auto;font-size:12px"></div>
+
+          <div style="margin-top:14px;padding:10px;background:#fffbeb;border-radius:8px;border:1px solid #fde68a">
+            <p class="text-xs" style="color:#92400e">
+              <strong>Cloud Portal Setup:</strong> On your cloud server set
+              <code>DATABASE_URL=postgresql://…</code> and <code>CLOUD_MODE=1</code>,
+              then run <code>python database_pg.py</code> to initialise the schema.
+              Set the same API key in cloud Settings → Sync.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div><!-- /#main -->
+
+<!-- ═══ MODALS ═══════════════════════════════════════════════════════ -->
+
+<!-- Add / Edit User Modal -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal">
+    <button class="modal-close" onclick="stopProfileSnap();closeModal('modal-user')">✕</button>
+    <h2 id="modal-user-title">Add Employee</h2>
+    <form id="user-form" onsubmit="submitUser(event)">
+      <input type="hidden" id="uf-id"/>
+      <!-- Profile photo: upload or quick webcam snap -->
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="position:relative;display:inline-block">
+          <img id="uf-photo-preview" class="photo-preview"
+               src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3Ccircle cx='40' cy='30' r='15' fill='%239ca3af'/%3E%3Cellipse cx='40' cy='65' rx='22' ry='15' fill='%239ca3af'/%3E%3C/svg%3E"/>
+        </div>
+        <!-- Quick-snap popup -->
+        <div id="uf-snap-wrap" style="display:none;margin-top:8px">
+          <video id="uf-snap-video" autoplay playsinline muted
+                 style="width:100%;border-radius:8px;background:#111;max-height:180px;object-fit:cover"></video>
+          <div style="display:flex;gap:6px;justify-content:center;margin-top:6px">
+            <button type="button" class="btn btn-primary btn-sm" onclick="snapProfilePhoto()">📸 Snap</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="stopProfileSnap()">Cancel</button>
+          </div>
+        </div>
+        <canvas id="uf-snap-canvas" style="display:none"></canvas>
+        <div class="mt-2" style="display:flex;gap:6px;justify-content:center">
+          <input type="file" id="uf-photo" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
+          <button type="button" class="btn btn-outline btn-sm"
+                  onclick="document.getElementById('uf-photo').click()">📂 Upload</button>
+          <button type="button" class="btn btn-outline btn-sm"
+                  onclick="startProfileSnap()">📷 Camera</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Employee ID *</label><input type="text" id="uf-emp_id" required placeholder="e.g. EMP001"/></div>
+        <div class="form-group"><label>Full Name *</label><input type="text" id="uf-name" required placeholder="Full name"/></div>
+        <div class="form-group"><label>Department</label>
+          <select id="uf-department"><option value="">Select…</option></select>
+        </div>
+        <div class="form-group"><label>Designation</label><input type="text" id="uf-designation" placeholder="e.g. Section Officer"/></div>
+        <div class="form-group"><label>Email</label><input type="email" id="uf-email" placeholder="email@dept.gov"/></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="uf-phone" placeholder="Mobile number"/></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+        <button type="button" class="btn btn-outline" onclick="stopProfileSnap();closeModal('modal-user')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="uf-submit">Save Employee</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Enroll Face Modal -->
+<div class="modal-overlay" id="modal-enroll">
+  <div class="modal" style="width:460px">
+    <button class="modal-close" onclick="closeEnrollModal()">✕</button>
+    <h2>🤖 Enroll Face</h2>
+    <input type="hidden" id="enroll-uid"/>
+
+    <!-- Tabs -->
+    <div class="enroll-tabs">
+      <button class="enroll-tab active" id="tab-webcam" onclick="switchEnrollTab('webcam')">📷 Use Camera</button>
+      <button class="enroll-tab"        id="tab-upload" onclick="switchEnrollTab('upload')">⬆ Upload Photo</button>
+    </div>
+
+    <!-- ── Webcam Panel ── -->
+    <div class="enroll-panel active" id="panel-webcam">
+      <!-- Live view -->
+      <div id="webcam-live-wrap">
+        <div class="webcam-wrap" id="webcam-box">
+          <video id="enroll-video" autoplay playsinline muted></video>
+          <div class="webcam-guide">
+            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="100" cy="100" rx="72" ry="88"
+                stroke="white" stroke-width="2.5" stroke-dasharray="8 5"/>
+            </svg>
+          </div>
+          <div class="webcam-corner" id="webcam-status-badge">Starting…</div>
+        </div>
+        <div class="webcam-controls">
+          <button class="btn btn-outline btn-sm" id="btn-flip" onclick="flipCamera()">🔄 Flip</button>
+          <button class="btn btn-primary"        id="btn-capture" onclick="captureFrame()" disabled>📸 Capture</button>
+        </div>
+        <p class="text-xs text-gray mt-2" style="text-align:center">
+          Position your face inside the oval, look directly at camera, then click Capture.
+        </p>
+      </div>
+      <!-- Captured preview -->
+      <div id="webcam-captured-wrap" style="display:none">
+        <canvas id="enroll-canvas" class="cam-captured-preview"></canvas>
+        <div class="webcam-controls mt-2">
+          <button class="btn btn-outline" onclick="retakePhoto()">🔁 Retake</button>
+          <button class="btn btn-success" onclick="submitCapturedFrame()">✅ Enroll This Photo</button>
+        </div>
+      </div>
+      <!-- No camera fallback -->
+      <div id="webcam-error" style="display:none;text-align:center;padding:28px 0">
+        <div style="font-size:40px">🚫</div>
+        <p class="text-sm mt-2" style="color:var(--red)" id="webcam-error-msg">Camera not accessible.</p>
+        <p class="text-xs text-gray mt-1">Switch to <strong>Upload Photo</strong> tab instead.</p>
+      </div>
+    </div>
+
+    <!-- ── Upload Panel ── -->
+    <div class="enroll-panel" id="panel-upload">
+      <div class="photo-upload mb-3" onclick="document.getElementById('enroll-photo').click()">
+        <div style="font-size:36px">📂</div>
+        <p class="text-sm mt-2">Click to select enrollment photo</p>
+        <p class="text-xs text-gray">JPG, PNG, WEBP — clear frontal face, good lighting</p>
+      </div>
+      <input type="file" id="enroll-photo" accept="image/*" style="display:none" onchange="doEnrollFromFile(this)"/>
+    </div>
+
+    <div id="enroll-status" class="mt-3"></div>
+  </div>
+</div>
+
+<!-- Manual Attendance Modal -->
+<div class="modal-overlay" id="modal-manual">
+  <div class="modal" style="width:380px">
+    <button class="modal-close" onclick="closeModal('modal-manual')">✕</button>
+    <h2>➕ Manual Attendance Entry</h2>
+    <div class="form-group mb-3"><label>Employee</label>
+      <select id="manual-user"><option value="">Select employee…</option></select>
+    </div>
+    <div class="form-group mb-3"><label>Punch Type</label>
+      <select id="manual-type"><option value="IN">IN</option><option value="OUT">OUT</option></select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal('modal-manual')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitManual()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Camera Modal -->
+<div class="modal-overlay" id="modal-camera">
+  <div class="modal" style="width:460px">
+    <button class="modal-close" onclick="closeModal('modal-camera')">✕</button>
+    <h2 id="modal-cam-title">Add Camera</h2>
+    <input type="hidden" id="cf-id"/>
+    <div class="form-grid">
+      <div class="form-group"><label>Camera Name *</label><input type="text" id="cf-name" placeholder="e.g. Main Gate"/></div>
+      <div class="form-group"><label>Location</label><input type="text" id="cf-location" placeholder="Building A - Ground Floor"/></div>
+      <div class="form-group full"><label>RTSP URL *</label><input type="text" id="cf-rtsp" placeholder="rtsp://user:pass@192.168.1.x:554/stream"/></div>
+      <div class="form-group"><label>Direction</label>
+        <select id="cf-direction">
+          <option value="BOTH">Entry & Exit (Auto)</option>
+          <option value="ENTRY">Entry Only</option>
+          <option value="EXIT">Exit Only</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="cf-active"><option value="1">Active</option><option value="0">Inactive</option></select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal('modal-camera')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCamera()">Save Camera</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snapshot Viewer Modal -->
+<div class="modal-overlay" id="modal-snapshot">
+  <div class="modal" style="width:480px;text-align:center">
+    <button class="modal-close" onclick="closeModal('modal-snapshot')">✕</button>
+    <h2>Attendance Snapshot</h2>
+    <img id="snapshot-img" style="width:100%;border-radius:8px;margin-top:12px" src=""/>
+    <p id="snapshot-info" class="text-sm text-gray mt-2"></p>
+  </div>
+</div>
+
+<!-- Add/Edit Holiday Modal -->
+<div class="modal-overlay" id="modal-holiday">
+  <div class="modal" style="width:420px">
+    <button class="modal-close" onclick="closeModal('modal-holiday')">✕</button>
+    <h2 id="modal-hol-title">Add Holiday</h2>
+    <input type="hidden" id="hf-id"/>
+    <div class="form-group mb-3">
+      <label>Date *</label>
+      <input type="date" id="hf-date"/>
+    </div>
+    <div class="form-group mb-3">
+      <label>Holiday Name *</label>
+      <input type="text" id="hf-name" placeholder="e.g. Republic Day"/>
+    </div>
+    <div class="form-group mb-3">
+      <label>Type</label>
+      <select id="hf-type">
+        <option value="national">🔴 National Holiday</option>
+        <option value="state">🟡 State Holiday</option>
+        <option value="restricted">🔵 Restricted Holiday</option>
+        <option value="office">🟢 Office Closure</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal('modal-holiday')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitHoliday()">Save Holiday</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit System User Modal -->
+<div class="modal-overlay" id="modal-sysuser">
+  <div class="modal" style="width:460px">
+    <button class="modal-close" onclick="closeModal('modal-sysuser')">✕</button>
+    <h2 id="modal-sysuser-title">Add System User</h2>
+    <input type="hidden" id="su-id"/>
+    <div class="form-grid">
+      <div class="form-group"><label>Username *</label><input type="text" id="su-username" placeholder="e.g. manager1"/></div>
+      <div class="form-group"><label>Full Name</label><input type="text" id="su-fullname" placeholder="Full name"/></div>
+      <div class="form-group"><label>Password <span id="su-pw-hint" style="font-weight:400;color:var(--gray-400)">(required)</span></label>
+        <input type="password" id="su-password" placeholder="Min 6 characters"/></div>
+      <div class="form-group"><label>Role *</label>
+        <select id="su-role">
+          <option value="manager">Manager</option>
+          <option value="guard">Guard / Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Department (optional)</label><input type="text" id="su-dept" placeholder="Restricts view scope"/></div>
+      <div class="form-group"><label>Status</label>
+        <select id="su-active"><option value="1">Active</option><option value="0">Inactive</option></select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal('modal-sysuser')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSysUser()">Save User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+const state = {
+  attPage: 1, unkPage: 1,
+  departments: [],
+  settings: {},
+  users: []
+};
+
+// ══════════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const fmt = (v, fb='-') => v || fb;
+
+async function api(url, opts={}) {
+  try {
+    const r = await fetch(url, {
+      headers: {'Content-Type':'application/json'},
+      ...opts
+    });
+    return await r.json();
+  } catch(e) {
+    return {status:'error', message:e.message};
+  }
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${type==='success'?'✅':type==='error'?'❌':'ℹ️'}</span> ${msg}`;
+  $('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3800);
+}
+
+function openModal(id) { $(id).classList.add('open') }
+function closeModal(id) { $(id).classList.remove('open') }
+
+function fmtTime(s) {
+  if (!s) return '-';
+  try { return new Date(s).toLocaleString('en-IN',{hour12:true,hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); }
+  catch { return s; }
+}
+function fmtDate(s) {
+  if (!s) return '-';
+  try { return new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  catch { return s; }
+}
+
+// ── Clock ──────────────────────────────────────────────────
+setInterval(() => {
+  $('clock').textContent = new Date().toLocaleString('en-IN',{
+    weekday:'short',day:'2-digit',month:'short',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true
+  });
+}, 1000);
+
+// ── Nav ────────────────────────────────────────────────────
+function navTo(page) {
+  const link = document.querySelector(`.nav-link[data-page="${page}"]`);
+  if (link) link.click();
+}
+
+document.querySelectorAll('.nav-link').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const page = a.dataset.page;
+    document.querySelectorAll('.nav-link').forEach(x=>x.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    $('page-'+page).classList.add('active');
+    const titles = {
+      dashboard:'Dashboard', live:'Live Cameras', inout:'In/Out Records',
+      today:"Today's Summary", unknown:'Unknown Faces', users:'User Enrollment',
+      reports:'Reports', settings:'Settings', sysusers:'System Users',
+      holidays:'Holiday Calendar', audit:'Audit Log'
+    };
+    $('page-title').textContent = titles[page] || page;
+    if (page==='dashboard')   loadDashboard();
+    if (page==='inout')       { initAttFilters(); loadAttendance(); }
+    if (page==='today')       { initTodayFilters(); loadTodaySummary(); }
+    if (page==='users')       { initUserFilters(); loadUsers(); }
+    if (page==='unknown')     { loadUnknownDetectionToggle(); loadUnknown(); }
+    if (page==='live')        loadCamGrid();
+    if (page==='reports')     initReports();
+    if (page==='settings')    loadSettings();
+    if (page==='sysusers')    loadSysUsers();
+    if (page==='holidays')    initHolidays();
+    if (page==='audit')       initAuditLog();
+  });
+});
+
+// ── Role-based nav visibility ──────────────────────────────
+function applyRoleNav(role) {
+  const isAdmin = role === 'admin';
+  const isMgr   = role === 'admin' || role === 'manager';
+  document.querySelectorAll('.nav-role-admin').forEach(el   => el.style.display = isAdmin ? '' : 'none');
+  document.querySelectorAll('.nav-role-manager').forEach(el => el.style.display = isMgr   ? '' : 'none');
+  // Role badge colours
+  const badge = $('role-badge');
+  const colours = {admin:'background:#fde8e8;color:#c81e1e', manager:'background:#fdf6b2;color:#c27803', guard:'background:var(--green-light);color:var(--green)'};
+  badge.setAttribute('style', `font-size:11px;padding:2px 10px;border-radius:20px;font-weight:600;${colours[role]||''}`);
+  badge.textContent = role ? role.charAt(0).toUpperCase()+role.slice(1) : '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  DEPARTMENTS
+// ══════════════════════════════════════════════════════════
+async function loadDepartments() {
+  const r = await api('/api/departments');
+  if (r.status==='ok') {
+    state.departments = r.data;
+    document.querySelectorAll('.dept-sel').forEach(sel => {
+      const val = sel.value;
+      sel.innerHTML = '<option value="">All Departments</option>' +
+        r.data.map(d=>`<option value="${d}">${d}</option>`).join('');
+      sel.value = val;
+    });
+    ['uf-department','rep-dept','today-dept','att-dept','user-dept-filter'].forEach(id => {
+      const el = $(id); if (!el) return;
+      const prev = el.value;
+      if (id==='uf-department') {
+        el.innerHTML = '<option value="">Select…</option>' + r.data.map(d=>`<option value="${d}">${d}</option>`).join('');
+      } else {
+        el.innerHTML = '<option value="">All Departments</option>' + r.data.map(d=>`<option value="${d}">${d}</option>`).join('');
+      }
+      el.value = prev;
+    });
+    renderDeptList();
+  }
+}
+
+function renderDeptList() {
+  const el = $('settings-depts'); if (!el) return;
+  el.innerHTML = state.departments.map(d =>
+    `<div class="flex items-center gap-2 mb-2"><span class="flex-1 text-sm">${d}</span></div>`
+  ).join('');
+}
+
+async function addDept() {
+  const name = $('new-dept').value.trim();
+  if (!name) return;
+  const r = await api('/api/departments', {method:'POST', body:JSON.stringify({name})});
+  if (r.status==='ok') { $('new-dept').value=''; await loadDepartments(); toast('Department added','success'); }
+  else toast(r.message,'error');
+}
+
+// ══════════════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════════════
+async function loadDashboard() {
+  const r = await api('/api/dashboard');
+  if (r.status !== 'ok') return;
+  const d = r.data;
+  $('s-total').textContent   = d.total_employees;
+  $('s-present').textContent = d.present_today;
+  $('s-absent').textContent  = d.absent_today;
+  $('s-late').textContent    = d.late_today;
+  $('s-unknown').textContent = d.unknown_today;
+
+  // Weekly chart
+  const maxP = Math.max(...d.weekly_trend.map(x=>x.present), 1);
+  $('trend-chart').innerHTML = d.weekly_trend.map(x => {
+    const h = Math.max(4, Math.round((x.present/maxP)*170));
+    const label = new Date(x.date).toLocaleDateString('en-IN',{weekday:'short'});
+    return `<div class="chart-bar" style="height:${h}px" title="${x.date}: ${x.present} present">
+      <span class="bar-val">${x.present}</span>
+      <span class="bar-label">${label}</span>
+    </div>`;
+  }).join('');
+
+  // Dept breakdown
+  $('dept-breakdown').innerHTML = d.dept_stats.map(ds => {
+    const pct = ds.total ? Math.round((ds.present/ds.total)*100) : 0;
+    return `<div class="mb-3">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-sm" style="flex:1">${ds.department||'Unassigned'}</span>
+        <span class="text-xs text-gray">${ds.present}/${ds.total}</span>
+        <span class="text-xs" style="color:var(--blue)">${pct}%</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('') || '<p class="text-sm text-gray">No data</p>';
+
+  // Recent activity
+  $('recent-tbody').innerHTML = d.recent_activity.length === 0
+    ? `<tr class="empty-row"><td colspan="5">No recent activity</td></tr>`
+    : d.recent_activity.map(a => `<tr>
+        <td><div class="flex items-center gap-2">${a.name}</div></td>
+        <td class="text-gray">${a.emp_id}</td>
+        <td><span class="tag tag-${a.punch_type.toLowerCase()}">${a.punch_type}</span></td>
+        <td>${fmtTime(a.punch_time)}</td>
+        <td>${a.confidence ? a.confidence.toFixed(1)+'%' : '—'}</td>
+      </tr>`).join('');
+
+  // ── New widgets ────────────────────────────────────────────
+
+  // Hourly heatmap
+  if (d.hourly_heatmap) {
+    const maxH = Math.max(...d.hourly_heatmap.map(x => x.count), 1);
+    $('hourly-chart').innerHTML = d.hourly_heatmap.map(x => {
+      const h   = Math.max(4, Math.round((x.count / maxH) * 170));
+      const lbl = x.hour < 12 ? `${x.hour}am` : x.hour === 12 ? '12pm' : `${x.hour-12}pm`;
+      return `<div class="chart-bar" style="height:${h}px;background:${x.count>0?'var(--blue)':'var(--gray-200)'}" title="${lbl}: ${x.count} punch-ins">
+        ${x.count > 0 ? `<span class="bar-val">${x.count}</span>` : ''}
+        <span class="bar-label">${lbl}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Top late arrivals
+  if (d.top_late_month) {
+    $('top-late-list').innerHTML = d.top_late_month.length === 0
+      ? '<p class="text-sm text-gray">No late arrivals this month 🎉</p>'
+      : d.top_late_month.map((u, i) => `
+        <div class="flex items-center gap-2 mb-3">
+          <div style="width:24px;height:24px;border-radius:50%;background:${i===0?'var(--red-light)':'var(--gray-100)'};
+               display:grid;place-items:center;font-size:11px;font-weight:700;color:${i===0?'var(--red)':'var(--gray-600)'}">${i+1}</div>
+          <div style="flex:1">
+            <div class="text-sm" style="font-weight:600">${u.name}</div>
+            <div class="text-xs text-gray">${u.department || '—'} · ${u.emp_id}</div>
+          </div>
+          <span class="tag tag-late">${u.late_days} day${u.late_days!==1?'s':''}</span>
+        </div>`).join('');
+  }
+
+  // Camera status
+  if (d.camera_status) {
+    const cs = d.camera_status;
+    $('cam-status-widget').innerHTML = `
+      <div style="display:flex;gap:16px;margin-bottom:12px">
+        <div class="stat-card" style="flex:1;padding:14px">
+          <div class="stat-icon" style="background:var(--green-light);width:38px;height:38px;font-size:18px">📹</div>
+          <div><h3 style="font-size:22px">${cs.live}</h3><p style="font-size:11px">Live</p></div>
+        </div>
+        <div class="stat-card" style="flex:1;padding:14px">
+          <div class="stat-icon" style="background:var(--red-light);width:38px;height:38px;font-size:18px">📷</div>
+          <div><h3 style="font-size:22px">${cs.offline}</h3><p style="font-size:11px">Offline</p></div>
+        </div>
+        <div class="stat-card" style="flex:1;padding:14px">
+          <div class="stat-icon" style="background:var(--gray-100);width:38px;height:38px;font-size:18px">🎥</div>
+          <div><h3 style="font-size:22px">${cs.total}</h3><p style="font-size:11px">Total</p></div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm w-full" onclick="navTo('live')">Open Live Cameras →</button>`;
+  }
+
+  // Unknown alerts
+  if (d.unknown_alerts) {
+    $('unknown-alerts-widget').innerHTML = d.unknown_alerts.length === 0
+      ? '<p class="text-sm text-gray">No unreviewed unknown faces today ✅</p>'
+      : d.unknown_alerts.map(u => `
+          <div style="position:relative;width:80px">
+            <img src="${u.snapshot_path ? '/'+u.snapshot_path : ''}"
+                 style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--red-light)"
+                 onerror="this.parentElement.style.display='none'"/>
+            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:#fff;font-size:9px;padding:2px 4px;border-radius:0 0 6px 6px;text-align:center">${u.camera_name||'CAM'}</div>
+          </div>`).join('') +
+        (d.unknown_today > 5 ? `<div style="display:flex;align-items:center;color:var(--gray-400);font-size:12px">+${d.unknown_today - 5} more</div>` : '');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  CAMERAS (Live)
+// ══════════════════════════════════════════════════════════
+async function loadCamGrid() {
+  const r = await api('/api/cameras');
+  const el = $('cam-grid');
+  if (r.status !== 'ok' || !r.data.length) {
+    el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 0">
+      <div style="font-size:40px;margin-bottom:10px">📹</div>
+      <p class="text-sm text-gray">No cameras configured yet.</p>
+      <button class="btn btn-primary btn-sm mt-3" onclick="openAddCamera()">➕ Add Camera</button>
+    </div>`;
+    return;
+  }
+  el.innerHTML = r.data.map(c => {
+    // Three distinct states:
+    //   1. not started  → dark placeholder + Start button
+    //   2. connecting   → spinner + Stop button  (streaming=true, connected=false)
+    //   3. live         → MJPEG img  (streaming=true, connected=true)
+    const statusDot = c.connected
+      ? `<span style="font-size:10px;color:var(--green)">● Live</span>`
+      : c.streaming
+        ? `<span style="font-size:10px;color:var(--yellow,#f59e0b)">◌ Connecting…</span>`
+        : c.active
+          ? `<span style="font-size:10px;color:var(--gray-400)">○ Idle</span>`
+          : `<span style="font-size:10px;color:var(--red)">✕ Inactive</span>`;
+
+    let feedHtml = '';
+    if (c.connected) {
+      feedHtml = `<img class="cam-feed" id="cam-feed-${c.id}"
+        src="/video_feed/${c.id}"
+        alt="${c.name} feed"
+        style="height:${camState.height}px;display:block;width:100%;object-fit:cover"/>`;
+    } else if (c.streaming) {
+      feedHtml = `<div id="cam-nofeed-${c.id}"
+        style="height:${camState.height}px;background:#111;display:flex;align-items:center;
+               justify-content:center;flex-direction:column;gap:8px;color:#aaa">
+        <div style="font-size:28px;animation:spin 1.4s linear infinite">⏳</div>
+        <p style="font-size:12px">Connecting to camera…</p>
+        <button class="btn btn-danger btn-xs" onclick="stopCam(${c.id})">⏹ Stop</button>
+      </div>`;
+    } else {
+      feedHtml = `<div id="cam-nofeed-${c.id}"
+        style="height:${camState.height}px;background:#111;display:flex;align-items:center;
+               justify-content:center;flex-direction:column;gap:8px;color:#666">
+        <div style="font-size:32px">📷</div>
+        <p style="font-size:12px">Camera not started</p>
+        <button class="btn btn-success btn-xs" onclick="startCam(${c.id})">▶ Start Stream</button>
+      </div>`;
+    }
+
+    return `<div class="cam-card">
+      ${feedHtml}
+      <div class="cam-info">
+        <h3>${c.name} ${statusDot}</h3>
+        <p>${c.location || '—'} · ${c.direction}</p>
+        <div class="cam-controls">
+          ${c.streaming
+            ? `<button class="btn btn-danger btn-xs" onclick="stopCam(${c.id})">⏹ Stop</button>`
+            : `<button class="btn btn-success btn-xs" onclick="startCam(${c.id})">▶ Start</button>`
+          }
+          <button class="btn btn-outline btn-xs" onclick="openEditCamera(${c.id})">✏ Edit</button>
+          <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="delCam(${c.id})">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Restore saved size settings after rendering
+  const h = $('cam-height-slider');
+  if (h) { h.value = camState.height; $('cam-height-val').textContent = camState.height + 'px'; }
+  document.querySelectorAll('.cam-size-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.cols) === camState.cols);
+  });
+  applyCamSize();
+}
+
+// Track which cameras are currently being polled so we don't double-start
+const _camPolling = new Set();
+
+async function startCam(id) {
+  const r = await api(`/api/cameras/${id}/start`, {method:'POST'});
+  if (r.status !== 'ok') { toast(r.message, 'error'); return; }
+  toast('Camera starting — waiting for frames…', 'success');
+  loadCamGrid(); // show "Connecting…" state immediately
+  if (_camPolling.has(id)) return;
+  _camPolling.add(id);
+  // Poll every 2 s for up to 30 s until frames are flowing
+  let attempts = 0;
+  const poll = async () => {
+    attempts++;
+    const status = await api('/api/cameras');
+    const cam = (status.data || []).find(c => c.id === id);
+    if (cam && cam.connected) {
+      _camPolling.delete(id);
+      loadCamGrid(); // switch to live MJPEG view
+      return;
+    }
+    if (!cam || !cam.streaming) {
+      // Thread died before connecting — stop polling
+      _camPolling.delete(id);
+      loadCamGrid();
+      return;
+    }
+    if (attempts < 15) {
+      setTimeout(poll, 2000);
+    } else {
+      _camPolling.delete(id);
+      toast('Camera stream timed out — check RTSP URL and network', 'error');
+      loadCamGrid();
+    }
+  };
+  setTimeout(poll, 2000);
+}
+async function stopCam(id) {
+  await api(`/api/cameras/${id}/stop`,{method:'POST'});
+  loadCamGrid();
+}
+async function delCam(id) {
+  if(!confirm('Delete this camera?')) return;
+  await api(`/api/cameras/${id}`,{method:'DELETE'});
+  toast('Camera removed','success');
+  loadCamGrid();
+}
+
+// ══════════════════════════════════════════════════════════
+//  ATTENDANCE
+// ══════════════════════════════════════════════════════════
+function initAttFilters() {
+  const today = new Date().toISOString().split('T')[0];
+  if (!$('att-from').value) $('att-from').value = today;
+  if (!$('att-to').value)   $('att-to').value   = today;
+  loadDepartments();
+}
+
+async function loadAttendance(page=1) {
+  state.attPage = page;
+  const from   = $('att-from').value;
+  const to     = $('att-to').value;
+  const dept   = $('att-dept').value;
+  const type   = $('att-type').value;
+  const search = $('att-search').value;
+  const params = new URLSearchParams({from,to,page,per_page:30});
+  if(dept)   params.set('department',dept);
+  if(type)   params.set('punch_type',type);
+
+  const r = await api(`/api/attendance?${params}`);
+  if(r.status!=='ok') return;
+
+  let rows = r.data.records;
+  if(search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(x=>x.name.toLowerCase().includes(q)||x.emp_id.toLowerCase().includes(q));
+  }
+
+  $('att-tbody').innerHTML = rows.length===0
+    ? `<tr class="empty-row"><td colspan="9">No records found</td></tr>`
+    : rows.map(a=>`<tr>
+        <td>${a.name}</td>
+        <td class="text-gray">${a.emp_id}</td>
+        <td>${a.department||'—'}</td>
+        <td><span class="tag tag-${a.punch_type.toLowerCase()}">${a.punch_type}</span></td>
+        <td>${fmtTime(a.punch_time)}</td>
+        <td class="text-gray">${a.camera_name||'—'}</td>
+        <td>${a.confidence?a.confidence.toFixed(1)+'%':'—'}</td>
+        <td>${a.snapshot_path
+          ? `<button class="btn btn-outline btn-xs" onclick="viewSnap('${a.snapshot_path}','${a.name} — ${fmtTime(a.punch_time)}')">👁 View</button>`
+          : '—'}</td>
+        <td><button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="delAtt(${a.id})">🗑</button></td>
+      </tr>`).join('');
+
+  // Pagination
+  renderPagination('att-pagination', page, r.data.pages, loadAttendance);
+}
+
+function renderPagination(containerId, current, total, fn) {
+  const el = $(containerId);
+  if(total<=1){el.innerHTML='';return;}
+  let html = '';
+  for(let i=1;i<=total;i++) {
+    if(i===1||i===total||Math.abs(i-current)<=1)
+      html += `<button class="${i===current?'active':''}" onclick="${fn.name}(${i})">${i}</button>`;
+    else if(Math.abs(i-current)===2)
+      html += `<span style="padding:5px 4px;color:var(--gray-400)">…</span>`;
+  }
+  el.innerHTML = html;
+}
+
+async function delAtt(id) {
+  if(!confirm('Delete this record?')) return;
+  await api(`/api/attendance/${id}`,{method:'DELETE'});
+  toast('Record deleted','success');
+  loadAttendance(state.attPage);
+}
+
+async function exportAttendance() {
+  const from=$('att-from').value, to=$('att-to').value, dept=$('att-dept').value;
+  const params = new URLSearchParams({from,to,format:'csv'});
+  if(dept) params.set('department',dept);
+  window.location.href = `/api/reports/attendance?${params}`;
+}
+
+function openManualAttModal() {
+  $('manual-user').innerHTML = '<option value="">Select employee…</option>' +
+    state.users.map(u=>`<option value="${u.id}">${u.name} (${u.emp_id})</option>`).join('');
+  openModal('modal-manual');
+}
+
+async function submitManual() {
+  const uid = $('manual-user').value;
+  const type = $('manual-type').value;
+  if(!uid){toast('Select employee','error');return;}
+  const r = await api('/api/attendance/manual',{method:'POST',body:JSON.stringify({user_id:uid,punch_type:type})});
+  if(r.status==='ok'){toast('Attendance logged','success');closeModal('modal-manual');loadAttendance();}
+  else toast(r.message,'error');
+}
+
+function viewSnap(path, info) {
+  $('snapshot-img').src = '/'+path;
+  $('snapshot-info').textContent = info;
+  openModal('modal-snapshot');
+}
+
+// ══════════════════════════════════════════════════════════
+//  TODAY'S SUMMARY
+// ══════════════════════════════════════════════════════════
+function initTodayFilters() { loadDepartments(); }
+
+async function loadTodaySummary() {
+  const dept = $('today-dept').value;
+  const params = dept ? `?department=${dept}` : '';
+  const r = await api(`/api/attendance/today-summary${params}`);
+  if(r.status!=='ok') return;
+  const workStart = state.settings['work_start'] || '09:00';
+  const lateMins  = parseInt(state.settings['late_threshold']||15);
+  $('today-tbody').innerHTML = r.data.length===0
+    ? `<tr class="empty-row"><td colspan="7">No data</td></tr>`
+    : r.data.map(u => {
+        let status, cls;
+        if(!u.first_in){status='Absent';cls='absent';}
+        else {
+          try {
+            const d = new Date().toISOString().split('T')[0];
+            const fi = new Date(u.first_in);
+            const ws = new Date(`${d}T${workStart}:00`);
+            ws.setMinutes(ws.getMinutes()+lateMins);
+            status = fi > ws ? 'Late' : 'Present';
+            cls    = fi > ws ? 'late' : 'in';
+          } catch { status='Present'; cls='in'; }
+        }
+        return `<tr>
+          <td>${u.emp_id}</td>
+          <td>${u.name}</td>
+          <td>${u.department||'—'}</td>
+          <td class="text-gray">${u.designation||'—'}</td>
+          <td>${u.first_in ? fmtTime(u.first_in) : '—'}</td>
+          <td>${u.last_out ? fmtTime(u.last_out) : '—'}</td>
+          <td><span class="tag tag-${cls}">${status}</span></td>
+        </tr>`;
+      }).join('');
+}
+
+async function exportToday() {
+  const dept = $('today-dept').value;
+  const params = new URLSearchParams({from:new Date().toISOString().split('T')[0],to:new Date().toISOString().split('T')[0],format:'csv'});
+  if(dept) params.set('department',dept);
+  window.location.href = `/api/reports/attendance?${params}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  UNKNOWN FACES
+// ══════════════════════════════════════════════════════════
+async function loadUnknown(page=1) {
+  state.unkPage = page;
+  const rev = $('unk-filter').value;
+  const params = new URLSearchParams({page,per_page:24});
+  if(rev!=='') params.set('reviewed',rev);
+  const r = await api(`/api/unknown-faces?${params}`);
+  if(r.status!=='ok') return;
+  $('unk-count').textContent = `${r.data.total} record(s)`;
+  $('unk-grid').innerHTML = r.data.records.length===0
+    ? '<p class="text-sm text-gray">No unknown face records found.</p>'
+    : r.data.records.map(f=>`
+        <div class="unk-card ${f.reviewed?'unk-reviewed':''}" data-fid="${f.id}"
+             onclick="toggleUnkCard(${f.id},this,this.querySelector('.unk-checkbox'))">
+          <input type="checkbox" class="unk-checkbox" onclick="event.stopPropagation();toggleUnkCard(${f.id},this.closest('.unk-card'),this)"/>
+          <img src="${f.snapshot_path?'/'+f.snapshot_path:''}" onerror="this.style.display='none'" alt="Unknown face"/>
+          <div class="unk-badge">${f.camera_name||'CAM'}</div>
+          <div class="info">
+            <div>${fmtTime(f.detected_at)}</div>
+            <div class="text-gray">${f.location||''}</div>
+            <div style="display:flex;gap:4px;margin-top:6px" onclick="event.stopPropagation()">
+              ${!f.reviewed?`<button class="btn btn-outline btn-xs" onclick="reviewUnk(${f.id})">✓ Review</button>`:'<span style="color:var(--green);font-size:11px">✓ Reviewed</span>'}
+              <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="delUnk(${f.id})">🗑</button>
+            </div>
+          </div>
+        </div>`).join('');
+  renderPagination('unk-pagination', page, Math.ceil(r.data.total/24), loadUnknown);
+}
+
+async function reviewUnk(id) {
+  await api(`/api/unknown-faces/${id}/review`,{method:'PUT',body:JSON.stringify({notes:'Reviewed'})});
+  toast('Marked as reviewed','success');
+  loadUnknown(state.unkPage);
+}
+async function delUnk(id) {
+  if(!confirm('Delete this record?')) return;
+  await api(`/api/unknown-faces/${id}`,{method:'DELETE'});
+  loadUnknown(state.unkPage);
+}
+
+// ══════════════════════════════════════════════════════════
+//  USERS / ENROLLMENT  (server-side pagination for 500+ users)
+// ══════════════════════════════════════════════════════════
+function initUserFilters() { loadDepartments(); }
+
+async function loadUsers(page = 1) {
+  state.userPage = page;
+  const q      = $('user-search').value.trim();
+  const dept   = $('user-dept-filter').value;
+  const active = $('user-active-filter').value;
+  const params = new URLSearchParams({ page, per_page: 50, active });
+  if (q)    params.set('q', q);
+  if (dept) params.set('department', dept);
+
+  const r = await api(`/api/users?${params}`);
+  if (r.status !== 'ok') return;
+
+  // API now returns { users, total, page, pages }
+  const users = r.data.users || r.data;   // backward-compat if still a plain array
+  const total = r.data.total  || users.length;
+  const pages = r.data.pages  || 1;
+
+  // Keep a flat list for dropdowns (manual attendance modal etc.)
+  if (page === 1) state.users = users;
+
+  $('users-total').textContent = `${total} employee${total !== 1 ? 's' : ''}`;
+
+  $('users-tbody').innerHTML = users.length === 0
+    ? `<tr class="empty-row"><td colspan="9">No employees found</td></tr>`
+    : users.map(u => `<tr>
+        <td>
+          <img class="avatar"
+               src="${u.photo_path ? '/' + u.photo_path : ''}"
+               onerror="this.src='data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 40 40&quot;%3E%3Ccircle cx=&quot;20&quot; cy=&quot;20&quot; r=&quot;20&quot; fill=&quot;%23e5e7eb&quot;/%3E%3C/svg%3E'"/>
+        </td>
+        <td>${u.emp_id}</td>
+        <td>${u.name}</td>
+        <td>${u.department || '—'}</td>
+        <td class="text-gray">${u.designation || '—'}</td>
+        <td class="text-gray">${u.email || u.phone || '—'}</td>
+        <td class="text-gray">${u.enrolled_at ? fmtDate(u.enrolled_at) : '<span style="color:var(--orange)">Not enrolled</span>'}</td>
+        <td><span class="tag ${u.active ? 'tag-active' : 'tag-inactive'}">${u.active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-xs" onclick="openEditUser(${u.id})">✏</button>
+            <button class="btn btn-outline btn-xs" onclick="openEnroll(${u.id})" title="Enroll Face">🤖</button>
+            <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="deactivateUser(${u.id})">🗑</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+  renderPagination('users-pagination', page, pages, loadUsers);
+}
+
+// Debounce search so it doesn't fire on every keystroke (important at 500+ users)
+let _userSearchTimer = null;
+$('user-search').addEventListener('input', () => {
+  clearTimeout(_userSearchTimer);
+  _userSearchTimer = setTimeout(() => loadUsers(1), 300);
+});
+$('user-dept-filter').addEventListener('change', () => loadUsers(1));
+$('user-active-filter').addEventListener('change', () => loadUsers(1));
+
+function openAddUserModal() {
+  $('modal-user-title').textContent = 'Add Employee';
+  $('user-form').reset();
+  $('uf-id').value = '';
+  $('uf-photo-preview').src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3C/svg%3E";
+  openModal('modal-user');
+}
+
+async function openEditUser(id) {
+  const r = await api(`/api/users/${id}`);
+  if(r.status!=='ok') return;
+  const u = r.data;
+  $('modal-user-title').textContent = 'Edit Employee';
+  $('uf-id').value          = u.id;
+  $('uf-emp_id').value      = u.emp_id;
+  $('uf-name').value        = u.name;
+  $('uf-department').value  = u.department||'';
+  $('uf-designation').value = u.designation||'';
+  $('uf-email').value       = u.email||'';
+  $('uf-phone').value       = u.phone||'';
+  $('uf-photo-preview').src = u.photo_path?'/'+u.photo_path:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3C/svg%3E";
+  openModal('modal-user');
+}
+
+async function submitUser(e) {
+  e.preventDefault();
+  const id   = $('uf-id').value;
+  const data = {
+    emp_id:$('uf-emp_id').value, name:$('uf-name').value,
+    department:$('uf-department').value, designation:$('uf-designation').value,
+    email:$('uf-email').value, phone:$('uf-phone').value
+  };
+  let uid = id;
+  if(id) {
+    const r = await api(`/api/users/${id}`,{method:'PUT',body:JSON.stringify(data)});
+    if(r.status!=='ok'){toast(r.message,'error');return;}
+  } else {
+    const r = await api('/api/users',{method:'POST',body:JSON.stringify(data)});
+    if(r.status!=='ok'){toast(r.message,'error');return;}
+    uid = r.data.id;
+  }
+  // Upload photo if selected
+  const photoFile = $('uf-photo').files[0];
+  if(photoFile && uid) {
+    const fd = new FormData(); fd.append('photo', photoFile);
+    await fetch(`/api/users/${uid}/photo`,{method:'POST',body:fd});
+  }
+  toast(id?'Employee updated':'Employee created','success');
+  closeModal('modal-user');
+  loadUsers();
+}
+
+function previewPhoto(input) {
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => $('uf-photo-preview').src = e.target.result;
+  reader.readAsDataURL(file);
+}
+
+async function deactivateUser(id) {
+  if(!confirm('Deactivate this employee?')) return;
+  await api(`/api/users/${id}`,{method:'DELETE'});
+  toast('Employee deactivated','success');
+  loadUsers();
+}
+
+// ══════════════════════════════════════════════════════════
+//  WEBCAM — ENROLLMENT MODAL
+// ══════════════════════════════════════════════════════════
+const webcam = {
+  stream:    null,
+  facingMode:'user',    // 'user' = front, 'environment' = back
+  captured:  null,      // ImageData blob waiting to be submitted
+};
+
+function openEnroll(uid) {
+  $('enroll-uid').value = uid;
+  $('enroll-status').innerHTML = '';
+  $('enroll-photo').value = '';
+  webcam.captured = null;
+  // Reset to live view
+  $('webcam-live-wrap').style.display    = '';
+  $('webcam-captured-wrap').style.display = 'none';
+  $('webcam-error').style.display        = 'none';
+  switchEnrollTab('webcam');
+  openModal('modal-enroll');
+  startWebcam();
+}
+
+function closeEnrollModal() {
+  stopWebcam();
+  closeModal('modal-enroll');
+}
+
+function switchEnrollTab(tab) {
+  ['webcam','upload'].forEach(t => {
+    $('tab-'+t).classList.toggle('active', t===tab);
+    $('panel-'+t).classList.toggle('active', t===tab);
+  });
+  if (tab === 'webcam') {
+    startWebcam();
+  } else {
+    stopWebcam();
+  }
+}
+
+async function startWebcam() {
+  // Already running
+  if (webcam.stream && webcam.stream.active) return;
+  stopWebcam();
+
+  const badge  = $('webcam-status-badge');
+  const video  = $('enroll-video');
+  const btnCap = $('btn-capture');
+  badge.textContent = 'Starting…';
+  btnCap.disabled   = true;
+  $('webcam-error').style.display     = 'none';
+  $('webcam-live-wrap').style.display = '';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: webcam.facingMode, width:{ideal:1280}, height:{ideal:720} },
+      audio: false
+    });
+    webcam.stream   = stream;
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      badge.textContent  = '● Live';
+      badge.style.background = 'rgba(5,122,85,.8)';
+      btnCap.disabled    = false;
+    };
+  } catch(err) {
+    const msgs = {
+      NotAllowedError:  'Camera permission denied. Please allow camera access in browser settings.',
+      NotFoundError:    'No camera found on this device.',
+      NotReadableError: 'Camera is in use by another application.',
+    };
+    $('webcam-error-msg').textContent = msgs[err.name] || `Camera error: ${err.message}`;
+    $('webcam-error').style.display     = '';
+    $('webcam-live-wrap').style.display = 'none';
+    switchEnrollTab('upload');   // auto-fallback
+  }
+}
+
+function stopWebcam() {
+  if (webcam.stream) {
+    webcam.stream.getTracks().forEach(t => t.stop());
+    webcam.stream = null;
+  }
+  const video = $('enroll-video');
+  if (video) video.srcObject = null;
+  const btn = $('btn-capture');
+  if (btn) btn.disabled = true;
+}
+
+function flipCamera() {
+  webcam.facingMode = webcam.facingMode === 'user' ? 'environment' : 'user';
+  startWebcam();
+}
+
+function captureFrame() {
+  const video  = $('enroll-video');
+  const canvas = $('enroll-canvas');
+  if (!video || !video.videoWidth) { toast('Camera not ready', 'error'); return; }
+
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+
+  // Mirror horizontally if front camera (matches what user sees)
+  if (webcam.facingMode === 'user') {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(video, 0, 0);
+
+  // Convert to blob and store
+  canvas.toBlob(blob => {
+    webcam.captured = blob;
+    stopWebcam();
+    $('webcam-live-wrap').style.display     = 'none';
+    $('webcam-captured-wrap').style.display = '';
+  }, 'image/jpeg', 0.92);
+}
+
+function retakePhoto() {
+  webcam.captured = null;
+  $('webcam-captured-wrap').style.display = 'none';
+  $('webcam-live-wrap').style.display     = '';
+  startWebcam();
+}
+
+async function submitCapturedFrame() {
+  if (!webcam.captured) { toast('No photo captured', 'error'); return; }
+  const uid = $('enroll-uid').value;
+  const st  = $('enroll-status');
+  st.innerHTML = '<div class="flex items-center gap-2"><span class="loader"></span> Processing face…</div>';
+  const fd = new FormData();
+  fd.append('photo', webcam.captured, 'webcam_capture.jpg');
+  const r = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
+  if (r.status === 'ok') {
+    st.innerHTML = '<p style="color:var(--green);font-weight:600">✅ Face enrolled successfully!</p>';
+    toast('Face enrolled!', 'success');
+    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1300);
+  } else {
+    st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
+    // Let them retake
+    setTimeout(() => retakePhoto(), 2000);
+  }
+}
+
+// File-upload path (Upload tab)
+async function doEnrollFromFile(input) {
+  const uid  = $('enroll-uid').value;
+  const file = input.files[0]; if (!file) return;
+  const st   = $('enroll-status');
+  st.innerHTML = '<div class="flex items-center gap-2"><span class="loader"></span> Processing face…</div>';
+  const fd = new FormData(); fd.append('photo', file);
+  const r  = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
+  if (r.status === 'ok') {
+    st.innerHTML = '<p style="color:var(--green);font-weight:600">✅ Face enrolled successfully!</p>';
+    toast('Face enrolled!', 'success');
+    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1300);
+  } else {
+    st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
+  }
+}
+
+// ── Profile photo quick-snap (in Add Employee modal) ────────
+const profileSnap = { stream: null };
+
+async function startProfileSnap() {
+  $('uf-snap-wrap').style.display = '';
+  const video = $('uf-snap-video');
+  try {
+    profileSnap.stream  = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+    video.srcObject     = profileSnap.stream;
+  } catch(e) {
+    toast('Camera access denied', 'error');
+    $('uf-snap-wrap').style.display = 'none';
+  }
+}
+
+function stopProfileSnap() {
+  if (profileSnap.stream) { profileSnap.stream.getTracks().forEach(t=>t.stop()); profileSnap.stream=null; }
+  $('uf-snap-video').srcObject = null;
+  $('uf-snap-wrap').style.display = 'none';
+}
+
+function snapProfilePhoto() {
+  const video  = $('uf-snap-video');
+  const canvas = $('uf-snap-canvas');
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0); ctx.scale(-1,1);
+  ctx.drawImage(video, 0, 0);
+  $('uf-photo-preview').src = canvas.toDataURL('image/jpeg', 0.92);
+  // Store as file-like blob on the input for later upload
+  canvas.toBlob(blob => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'profile_snap.jpg', {type:'image/jpeg'}));
+    $('uf-photo').files = dt.files;
+  }, 'image/jpeg', 0.92);
+  stopProfileSnap();
+}
+
+// ── Import ─────────────────────────────────────────────────
+function openImportModal() { $('import-file').click(); }
+
+async function importCSV(input) {
+  const file = input.files[0]; if(!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  const r  = await fetch('/api/users/import',{method:'POST',body:fd}).then(x=>x.json());
+  const el = $('import-result');
+  if(r.status==='ok') {
+    el.innerHTML = `<p class="text-sm" style="color:var(--green)">✅ ${r.message}</p>
+      ${r.data.errors.length?`<ul style="font-size:12px;color:var(--red);margin-top:4px">${r.data.errors.map(e=>`<li>${e}</li>`).join('')}</ul>`:''}`;
+    toast(r.message,'success');
+    loadUsers();
+  } else {
+    el.innerHTML = `<p class="text-sm" style="color:var(--red)">❌ ${r.message}</p>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  REPORTS
+// ══════════════════════════════════════════════════════════
+function initReports() {
+  const today = new Date().toISOString().split('T')[0];
+  const month = new Date().toISOString().slice(0,7);
+  // Attendance tab
+  if(!$('rep-from').value)   $('rep-from').value   = today;
+  if(!$('rep-to').value)     $('rep-to').value     = today;
+  if(!$('rep-month').value)  $('rep-month').value  = month;
+  // Late / Absent / Hours / Employee-history tabs — default to last 30 days
+  const d30ago = new Date(); d30ago.setDate(d30ago.getDate() - 30);
+  const prior  = d30ago.toISOString().split('T')[0];
+  ['late','absent','hours'].forEach(p => {
+    const f = $(p+'-from'), t = $(p+'-to');
+    if(f && !f.value) f.value = prior;
+    if(t && !t.value) t.value = today;
+  });
+  const ehf = $('emp-hist-from'), eht = $('emp-hist-to');
+  if(ehf && !ehf.value) ehf.value = prior;
+  if(eht && !eht.value) eht.value = today;
+  // Populate all report dept selects
+  ['late-dept','absent-dept','hours-dept','rep-dept','monthly-dept'].forEach(id => {
+    const el = $(id); if(!el) return;
+    const prev = el.value;
+    el.innerHTML = '<option value="">All</option>' +
+      state.departments.map(d=>`<option value="${d}">${d}</option>`).join('');
+    el.value = prev;
+  });
+  // Populate employee-history dropdown
+  _loadEmpHistorySelect();
+  loadDepartments();
+}
+
+async function _loadEmpHistorySelect() {
+  const sel = $('emp-hist-uid'); if (!sel) return;
+  const r   = await api('/api/users?per_page=500&active=1');
+  const users = (r.status==='ok') ? (r.data.users || r.data) : [];
+  sel.innerHTML = '<option value="">Select employee…</option>' +
+    users.map(u=>`<option value="${u.id}">${u.name} (${u.emp_id})</option>`).join('');
+}
+
+// ── Report-tab switcher ────────────────────────────────────
+function switchReportTab(tab) {
+  ['attendance','monthly','late','absent','hours','employee'].forEach(t => {
+    $('rtab-'+t).classList.toggle('active', t===tab);
+    $('rpanel-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+async function loadReport() {
+  const from=$('rep-from').value, to=$('rep-to').value, dept=$('rep-dept').value;
+  const params = new URLSearchParams({from,to});
+  if(dept) params.set('department',dept);
+  const r = await api(`/api/reports/attendance?${params}`);
+  if(r.status!=='ok') return;
+  const workStart = state.settings['work_start']||'09:00';
+  const lateMins  = parseInt(state.settings['late_threshold']||15);
+  $('report-tbody').innerHTML = r.data.length===0
+    ? `<tr class="empty-row"><td colspan="7">No records</td></tr>`
+    : r.data.map(row=>{
+        let status='Absent', cls='absent';
+        if(row.first_in) {
+          try {
+            const fi = new Date(row.first_in);
+            const ws = new Date(`${row.date}T${workStart}:00`);
+            ws.setMinutes(ws.getMinutes()+lateMins);
+            status = fi>ws?'Late':'Present';
+            cls    = fi>ws?'late':'in';
+          } catch{ status='Present'; cls='in'; }
+        }
+        return `<tr>
+          <td>${row.emp_id}</td>
+          <td>${row.name}</td>
+          <td>${row.department||'—'}</td>
+          <td>${row.date||'—'}</td>
+          <td>${row.first_in?fmtTime(row.first_in):'—'}</td>
+          <td>${row.last_out?fmtTime(row.last_out):'—'}</td>
+          <td><span class="tag tag-${cls}">${status}</span></td>
+        </tr>`;
+      }).join('');
+}
+
+async function loadMonthly() {
+  const month = $('rep-month').value;
+  const dept  = $('monthly-dept') ? $('monthly-dept').value : '';
+  const params = new URLSearchParams({month});
+  if (dept) params.set('department', dept);
+  const r = await api(`/api/reports/monthly-summary?${params}`);
+  if (r.status !== 'ok') return;
+
+  // Backend returns { rows, working_days, holidays, month }
+  const rows        = r.data.rows || r.data;         // backward compat
+  const wdays       = r.data.working_days ?? '—';
+  const holidays    = r.data.holidays    || [];
+
+  // Meta bar
+  const meta = $('monthly-meta');
+  if (meta) {
+    meta.style.display = '';
+    $('mm-wdays').textContent = wdays;
+    $('mm-hdays').textContent = holidays.length;
+    $('mm-emps').textContent  = rows.length;
+    $('mm-holidays-list').innerHTML = holidays.length
+      ? '<strong>Holidays:</strong> ' + holidays.map(h=>`<span class="tag tag-late" style="margin:2px">${h}</span>`).join('')
+      : '';
+  }
+
+  $('monthly-tbody').innerHTML = rows.length === 0
+    ? `<tr class="empty-row"><td colspan="9">No data</td></tr>`
+    : rows.map(u => {
+        const pct   = u.attendance_pct ?? (wdays ? Math.round((u.days_present/wdays)*100) : 0);
+        const color = pct >= 90 ? 'var(--green)' : pct >= 75 ? 'var(--orange)' : 'var(--red)';
+        return `<tr>
+          <td>${u.emp_id}</td>
+          <td>${u.name}</td>
+          <td>${u.department||'—'}</td>
+          <td class="text-gray">${u.designation||'—'}</td>
+          <td style="text-align:center">${wdays}</td>
+          <td style="text-align:center;font-weight:600;color:var(--green)">${u.days_present}</td>
+          <td style="text-align:center;color:var(--red)">${u.days_absent ?? (wdays !== '—' ? Math.max(0,wdays-u.days_present) : '—')}</td>
+          <td style="text-align:center;color:var(--orange)">${u.days_late ?? '—'}</td>
+          <td>
+            <div class="flex items-center gap-2">
+              <div class="progress" style="flex:1;max-width:80px"><div class="progress-bar" style="width:${pct}%;background:${color}"></div></div>
+              <span class="text-xs" style="color:${color};font-weight:600">${pct}%</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+function exportMonthly() {
+  const month = $('rep-month').value;
+  const dept  = $('monthly-dept') ? $('monthly-dept').value : '';
+  const p = new URLSearchParams({month, format:'csv'});
+  if (dept) p.set('department', dept);
+  window.location.href = `/api/reports/monthly-summary?${p}`;
+}
+
+function exportReport() {
+  const from=$('rep-from').value, to=$('rep-to').value, dept=$('rep-dept').value;
+  const params = new URLSearchParams({from,to,format:'csv'});
+  if(dept) params.set('department',dept);
+  window.location.href = `/api/reports/attendance?${params}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════════════════════
+async function loadSettings() {
+  const r = await api('/api/settings');
+  if(r.status!=='ok') return;
+
+  const byCategory = {};
+  r.data.settings.forEach(s => {
+    if(!byCategory[s.category]) byCategory[s.category]=[];
+    byCategory[s.category].push(s);
+    state.settings[s.key] = s.value;
+  });
+
+  ['general','attendance','recognition','compliance'].forEach(cat => {
+    const el = $(`settings-${cat}`); if(!el) return;
+    el.innerHTML = (byCategory[cat]||[]).map(s=>`
+      <div class="form-group mb-3">
+        <label>${s.label||s.key}</label>
+        <input type="${s.key.includes('time')&&!s.key.includes('timeout')&&!s.key.includes('retention')&&!s.key.includes('length')&&!s.key.includes('attempts')?'time':'text'}"
+               id="setting-${s.key}" value="${s.value||''}"
+               data-key="${s.key}" data-cat="${cat}"/>
+      </div>`).join('');
+  });
+
+  // Load theme colour inputs
+  const pc = (byCategory['theme']||[]).find(s=>s.key==='primary_color');
+  const ac = (byCategory['theme']||[]).find(s=>s.key==='accent_color');
+  const ot = (byCategory['theme']||[]).find(s=>s.key==='org_title');
+  const on2= (byCategory['general']||[]).find(s=>s.key==='org_name');
+  if (pc) { $('theme-primary') && ($('theme-primary').value=$('theme-primary-hex').value=pc.value); }
+  if (ac) { $('theme-accent')  && ($('theme-accent').value=$('theme-accent-hex').value=ac.value);  }
+  if (ot) { $('theme-org-title') && ($('theme-org-title').value=ot.value); }
+  if (on2){ $('theme-org-name')  && ($('theme-org-name').value=on2.value); }
+  _updateThemeSwatches();
+
+  // Favicon preview
+  const fav = (byCategory['theme']||[]).find(s=>s.key==='favicon_path');
+  if (fav && fav.value) {
+    const fp = $('favicon-preview');
+    if (fp) { fp.src='/'+fav.value; fp.style.display='block'; }
+  }
+
+  // Cameras in settings
+  const camR = await api('/api/cameras');
+  const camEl = $('settings-cameras');
+  if(camR.status==='ok') {
+    camEl.innerHTML = camR.data.length===0
+      ? '<p class="text-sm text-gray">No cameras added yet.</p>'
+      : camR.data.map(c=>`
+          <div class="flex items-center gap-2 mb-2" style="font-size:13px">
+            <span class="flex-1"><strong>${c.name}</strong> <span class="text-gray text-xs">${c.rtsp_url.slice(0,35)}…</span></span>
+            <span class="tag ${c.active?'tag-active':'tag-inactive'}">${c.direction}</span>
+            <button class="btn btn-outline btn-xs" onclick="openEditCamera(${c.id})">✏</button>
+            <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="delCam(${c.id});loadSettings()">🗑</button>
+          </div>`).join('');
+  }
+
+  // Logo
+  _refreshLogoUI(r.data.settings.find(s=>s.key==='org_logo')?.value || '');
+
+  // Departments
+  state.departments = r.data.departments.map(d=>d.name);
+  renderDeptList();
+
+  // Sync settings — populate dedicated inputs by data-key
+  const syncKeys = ['cloud_api_url','cloud_api_key','site_id','sync_interval','sync_enabled'];
+  syncKeys.forEach(k => {
+    const el = document.querySelector(`[data-cat="sync"][data-key="${k}"]`);
+    if (!el) return;
+    const setting = r.data.settings.find(s => s.key === k);
+    if (setting) el.value = setting.value || '';
+  });
+  loadSyncStatus();
+}
+
+async function saveSettings(category) {
+  const inputs = document.querySelectorAll(`[data-cat="${category}"]`);
+  const data = {};
+  // Exclude file-path keys managed by dedicated upload endpoints — saving these
+  // as empty strings via the generic PUT would silently wipe uploaded files.
+  const UPLOAD_KEYS = new Set(['org_logo', 'favicon_path']);
+  inputs.forEach(i => {
+    if (!UPLOAD_KEYS.has(i.dataset.key)) data[i.dataset.key] = i.value;
+  });
+  if (!Object.keys(data).length) { toast('Nothing to save', 'info'); return; }
+  const r = await api('/api/settings',{method:'PUT',body:JSON.stringify(data)});
+  if(r.status==='ok') toast('Settings saved','success');
+  else toast(r.message,'error');
+  Object.assign(state.settings, data);
+}
+
+// ══════════════════════════════════════════════════════════
+//  CAMERA MODAL
+// ══════════════════════════════════════════════════════════
+function openAddCamera() {
+  $('modal-cam-title').textContent = 'Add Camera';
+  $('cf-id').value='';$('cf-name').value='';$('cf-location').value='';
+  $('cf-rtsp').value='';$('cf-direction').value='BOTH';$('cf-active').value='1';
+  openModal('modal-camera');
+}
+
+async function openEditCamera(id) {
+  const r = await api('/api/cameras');
+  if(r.status!=='ok') return;
+  const c = r.data.find(x=>x.id===id);
+  if(!c) return;
+  $('modal-cam-title').textContent = 'Edit Camera';
+  $('cf-id').value        = c.id;
+  $('cf-name').value      = c.name;
+  $('cf-location').value  = c.location||'';
+  $('cf-rtsp').value      = c.rtsp_url;
+  $('cf-direction').value = c.direction;
+  $('cf-active').value    = c.active;
+  openModal('modal-camera');
+}
+
+async function submitCamera() {
+  const id   = $('cf-id').value;
+  const data = {
+    name:$('cf-name').value, rtsp_url:$('cf-rtsp').value,
+    location:$('cf-location').value, direction:$('cf-direction').value,
+    active:parseInt($('cf-active').value)
+  };
+  if(!data.name||!data.rtsp_url){toast('Name and RTSP URL required','error');return;}
+  const r = id
+    ? await api(`/api/cameras/${id}`,{method:'PUT',body:JSON.stringify(data)})
+    : await api('/api/cameras',{method:'POST',body:JSON.stringify(data)});
+  if(r.status==='ok'||r.status==='ok'){
+    toast(id?'Camera updated':'Camera added','success');
+    closeModal('modal-camera');
+    loadCamGrid();
+    if($('settings-cameras')) loadSettings();
+  } else toast(r.message,'error');
+}
+
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+(async function init() {
+  const me = await api('/api/auth/me');
+  if (me.status === 'ok') {
+    $('header-user').textContent = '👤 ' + (me.data.full_name || me.data.username);
+    applyRoleNav(me.data.role || 'guard');
+    state.role = me.data.role || 'guard';
+  }
+  await loadDepartments();
+  await loadDashboard();
+  setInterval(() => {
+    if($('page-dashboard').classList.contains('active')) loadDashboard();
+  }, 60000);
+})();
+
+// ══════════════════════════════════════════════════════════
+//  UNKNOWN FACE DETECTION TOGGLE
+// ══════════════════════════════════════════════════════════
+async function loadUnknownDetectionToggle() {
+  const r = await api('/api/settings');
+  if (r.status !== 'ok') return;
+  const s   = r.data.settings.find(x => x.key === 'unknown_detection');
+  const on  = s ? s.value === '1' : true;
+  const tog = $('unk-detect-toggle');
+  if (tog) tog.checked = on;
+  _applyDetectionBanner(on);
+}
+
+function _applyDetectionBanner(on) {
+  const banner = $('unk-detect-banner');
+  if (!banner) return;
+  banner.style.borderLeft = `4px solid ${on ? 'var(--green)' : 'var(--red)'}`;
+}
+
+async function toggleUnknownDetection(checkbox) {
+  const val = checkbox.checked ? '1' : '0';
+  const r   = await api('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ unknown_detection: val })
+  });
+  if (r.status === 'ok') {
+    toast(checkbox.checked ? '✅ Unknown face detection ON' : '⛔ Unknown face detection OFF',
+          checkbox.checked ? 'success' : 'info');
+    _applyDetectionBanner(checkbox.checked);
+    state.settings['unknown_detection'] = val;
+  } else {
+    checkbox.checked = !checkbox.checked;   // revert
+    toast(r.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════
+async function doLogout() {
+  await api('/api/auth/logout', {method:'POST'});
+  window.location.href = '/login';
+}
+
+async function changePassword() {
+  const cur  = $('pw-current').value;
+  const np   = $('pw-new').value;
+  const nc   = $('pw-confirm').value;
+  const msg  = $('pw-msg');
+  if (!cur || !np || !nc) { msg.innerHTML='<p style="color:var(--red)">All fields required</p>'; return; }
+  if (np !== nc) { msg.innerHTML='<p style="color:var(--red)">New passwords do not match</p>'; return; }
+  if (np.length < 6) { msg.innerHTML='<p style="color:var(--red)">Min 6 characters</p>'; return; }
+  const r = await api('/api/auth/change-password', {method:'POST', body:JSON.stringify({current_password:cur,new_password:np})});
+  if (r.status==='ok') {
+    msg.innerHTML='<p style="color:var(--green)">✅ Password changed!</p>';
+    $('pw-current').value=$('pw-new').value=$('pw-confirm').value='';
+    toast('Password updated','success');
+  } else {
+    msg.innerHTML=`<p style="color:var(--red)">❌ ${r.message}</p>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOGO UPLOAD
+// ══════════════════════════════════════════════════════════
+async function uploadLogo(input) {
+  const file = input.files[0]; if (!file) return;
+  const fd   = new FormData(); fd.append('logo', file);
+  const r    = await fetch('/api/settings/logo', {method:'POST', body:fd}).then(x=>x.json());
+  if (r.status === 'ok') {
+    _refreshLogoUI(r.data.logo_path);
+    toast('Logo uploaded', 'success');
+  } else toast(r.message, 'error');
+}
+
+async function removeLogo() {
+  await api('/api/settings', {method:'PUT', body:JSON.stringify({org_logo:''})});
+  _refreshLogoUI('');
+  toast('Logo removed', 'success');
+}
+
+// ══════════════════════════════════════════════════════════
+//  CAMERA SIZE CONTROLS
+// ══════════════════════════════════════════════════════════
+const camState = {
+  cols:   parseInt(localStorage.getItem('cam_cols')  || '4'),
+  height: parseInt(localStorage.getItem('cam_height') || '175'),
+};
+
+function setCamSize(btn, cols) {
+  document.querySelectorAll('.cam-size-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  camState.cols = cols;
+  localStorage.setItem('cam_cols', cols);
+  applyCamSize();
+}
+
+function updateCamHeight(val) {
+  camState.height = parseInt(val);
+  $('cam-height-val').textContent = val + 'px';
+  localStorage.setItem('cam_height', val);
+  applyCamSize();
+}
+
+function applyCamSize() {
+  const grid = $('cam-grid'); if (!grid) return;
+  const minW = {1:'100%', 2:'48%', 3:'31%', 4:'22%'}[camState.cols] || '22%';
+  grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${minW}, 1fr))`;
+  document.querySelectorAll('.cam-feed').forEach(v => v.style.height = camState.height + 'px');
+}
+
+// applyCamSize is called inside loadCamGrid after render — no wrapper needed
+
+// ══════════════════════════════════════════════════════════
+//  UNKNOWN FACES — MULTI-SELECT
+// ══════════════════════════════════════════════════════════
+let unkSelectionMode = false;
+const unkSelected    = new Set();
+
+function toggleSelectionMode() {
+  unkSelectionMode = !unkSelectionMode;
+  const grid = $('unk-grid');
+  const bar  = $('unk-selection-bar');
+  const btn  = $('btn-sel-mode');
+  grid.classList.toggle('selection-mode', unkSelectionMode);
+  bar.style.display  = unkSelectionMode ? 'flex' : 'none';
+  btn.textContent    = unkSelectionMode ? '✕ Cancel Selection' : '☑ Select Multiple';
+  btn.className      = unkSelectionMode ? 'btn btn-outline btn-sm' : 'btn btn-outline btn-sm';
+  if (!unkSelectionMode) {
+    unkSelected.clear();
+    document.querySelectorAll('.unk-checkbox').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.unk-card').forEach(c => c.classList.remove('selected'));
+    updateSelCount();
+  }
+}
+
+function updateSelCount() {
+  $('unk-sel-count').textContent = `${unkSelected.size} selected`;
+  $('btn-bulk-delete').disabled  = unkSelected.size === 0;
+}
+
+function toggleUnkCard(fid, card, cb) {
+  if (!unkSelectionMode) return;
+  if (unkSelected.has(fid)) {
+    unkSelected.delete(fid);
+    card.classList.remove('selected');
+    cb.checked = false;
+  } else {
+    unkSelected.add(fid);
+    card.classList.add('selected');
+    cb.checked = true;
+  }
+  updateSelCount();
+}
+
+function selectAllUnknown() {
+  document.querySelectorAll('.unk-card[data-fid]').forEach(card => {
+    const fid = parseInt(card.dataset.fid);
+    unkSelected.add(fid);
+    card.classList.add('selected');
+    const cb = card.querySelector('.unk-checkbox');
+    if (cb) cb.checked = true;
+  });
+  updateSelCount();
+}
+
+function selectNoneUnknown() {
+  unkSelected.clear();
+  document.querySelectorAll('.unk-card').forEach(c => {
+    c.classList.remove('selected');
+    const cb = c.querySelector('.unk-checkbox');
+    if (cb) cb.checked = false;
+  });
+  updateSelCount();
+}
+
+async function bulkDeleteUnknown() {
+  if (unkSelected.size === 0) return;
+  if (!confirm(`Delete ${unkSelected.size} selected face record(s)?`)) return;
+  const ids = [...unkSelected];
+  const r   = await api('/api/unknown-faces/bulk-delete', {method:'POST', body:JSON.stringify({ids})});
+  if (r.status === 'ok') {
+    toast(r.message, 'success');
+    unkSelected.clear();
+    updateSelCount();
+    loadUnknown(state.unkPage);
+  } else toast(r.message, 'error');
+}
+
+async function markAllReviewed() {
+  if (unkSelected.size === 0) return;
+  for (const fid of unkSelected) {
+    await api(`/api/unknown-faces/${fid}/review`, {method:'PUT', body:JSON.stringify({notes:'Bulk reviewed'})});
+  }
+  toast(`${unkSelected.size} record(s) marked reviewed`, 'success');
+  unkSelected.clear();
+  updateSelCount();
+  loadUnknown(state.unkPage);
+}
+
+// ══════════════════════════════════════════════════════════
+//  LATE ARRIVALS REPORT
+// ══════════════════════════════════════════════════════════
+async function loadLateReport() {
+  const from = $('late-from').value, to = $('late-to').value, dept = $('late-dept').value;
+  if (!from || !to) { toast('Select date range', 'error'); return; }
+  const params = new URLSearchParams({from, to});
+  if (dept) params.set('department', dept);
+  const r = await api(`/api/reports/late-arrivals?${params}`);
+  if (r.status !== 'ok') { toast(r.message, 'error'); return; }
+  const rows = r.data;
+  const totalMins = rows.reduce((s, x) => s + (x.minutes_late || 0), 0);
+  $('late-summary').innerHTML = rows.length
+    ? `<span class="tag tag-late">${rows.length} late arrival${rows.length !== 1 ? 's' : ''}</span>
+       <span class="text-sm text-gray" style="margin-left:8px">Avg late: ${rows.length ? Math.round(totalMins/rows.length) : 0} min</span>`
+    : '<span class="tag tag-in">No late arrivals in this period 🎉</span>';
+  $('late-tbody').innerHTML = rows.length === 0
+    ? `<tr class="empty-row"><td colspan="7">No late arrivals</td></tr>`
+    : rows.map(r => `<tr>
+        <td>${r.date || '—'}</td>
+        <td>${r.emp_id}</td>
+        <td>${r.name}</td>
+        <td>${r.department || '—'}</td>
+        <td>${r.first_in ? fmtTime(r.first_in) : '—'}</td>
+        <td>${r.deadline || '—'}</td>
+        <td><span class="tag tag-late">${r.minutes_late} min</span></td>
+      </tr>`).join('');
+}
+
+function exportLateReport() {
+  const from = $('late-from').value, to = $('late-to').value, dept = $('late-dept').value;
+  const p = new URLSearchParams({from, to, format:'csv', type:'late'});
+  if (dept) p.set('department', dept);
+  window.location.href = `/api/reports/late-arrivals?${p}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  ABSENTEES REPORT
+// ══════════════════════════════════════════════════════════
+async function loadAbsentReport() {
+  const from = $('absent-from').value, to = $('absent-to').value, dept = $('absent-dept').value;
+  if (!from || !to) { toast('Select date range', 'error'); return; }
+  const params = new URLSearchParams({from, to});
+  if (dept) params.set('department', dept);
+  const r = await api(`/api/reports/absentees?${params}`);
+  if (r.status !== 'ok') { toast(r.message, 'error'); return; }
+  const rows = r.data;
+  $('absent-summary').innerHTML = rows.length
+    ? `<span class="tag tag-absent">${rows.length} absence record${rows.length !== 1 ? 's' : ''}</span>`
+    : '<span class="tag tag-in">Full attendance in this period 🎉</span>';
+  $('absent-tbody').innerHTML = rows.length === 0
+    ? `<tr class="empty-row"><td colspan="5">No absences found</td></tr>`
+    : rows.map(r => `<tr>
+        <td>${r.date || '—'}</td>
+        <td>${r.emp_id}</td>
+        <td>${r.name}</td>
+        <td>${r.department || '—'}</td>
+        <td class="text-gray">${r.designation || '—'}</td>
+      </tr>`).join('');
+}
+
+function exportAbsentReport() {
+  const from = $('absent-from').value, to = $('absent-to').value, dept = $('absent-dept').value;
+  const p = new URLSearchParams({from, to, format:'csv'});
+  if (dept) p.set('department', dept);
+  window.location.href = `/api/reports/absentees?${p}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  WORKING HOURS REPORT
+// ══════════════════════════════════════════════════════════
+async function loadHoursReport() {
+  const from = $('hours-from').value, to = $('hours-to').value, dept = $('hours-dept').value;
+  if (!from || !to) { toast('Select date range', 'error'); return; }
+  const params = new URLSearchParams({from, to});
+  if (dept) params.set('department', dept);
+  const r = await api(`/api/reports/working-hours?${params}`);
+  if (r.status !== 'ok') { toast(r.message, 'error'); return; }
+  const workEnd = state.settings['work_end'] || '18:00';
+  $('hours-tbody').innerHTML = r.data.length === 0
+    ? `<tr class="empty-row"><td colspan="9">No records found</td></tr>`
+    : r.data.map(row => {
+        const hrs    = row.hours_worked != null ? row.hours_worked.toFixed(1) : '—';
+        const expH   = _timeToHours(workEnd) - _timeToHours(state.settings['work_start'] || '09:00');
+        const ot     = row.hours_worked != null ? Math.max(0, row.hours_worked - expH).toFixed(1) : '—';
+        const tag    = !row.first_in ? 'absent' : row.hours_worked >= expH - 0.5 ? 'in' : 'late';
+        const label  = !row.first_in ? 'Absent' : row.hours_worked >= expH - 0.5 ? 'Full Day' : 'Short';
+        return `<tr>
+          <td>${row.date || '—'}</td>
+          <td>${row.emp_id}</td>
+          <td>${row.name}</td>
+          <td>${row.department || '—'}</td>
+          <td>${row.first_in  ? fmtTime(row.first_in)  : '—'}</td>
+          <td>${row.last_out  ? fmtTime(row.last_out)  : '—'}</td>
+          <td><strong>${hrs}</strong> hrs</td>
+          <td>${ot !== '—' && parseFloat(ot) > 0 ? `<span class="tag tag-late">+${ot}h</span>` : '—'}</td>
+          <td><span class="tag tag-${tag}">${label}</span></td>
+        </tr>`;
+      }).join('');
+}
+
+function _timeToHours(t) {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return h + (m || 0) / 60;
+}
+
+function exportHoursReport() {
+  const from = $('hours-from').value, to = $('hours-to').value, dept = $('hours-dept').value;
+  const p = new URLSearchParams({from, to, format:'csv'});
+  if (dept) p.set('department', dept);
+  window.location.href = `/api/reports/working-hours?${p}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  EMPLOYEE HISTORY REPORT
+// ══════════════════════════════════════════════════════════
+async function loadEmpHistory() {
+  const uid  = $('emp-hist-uid').value;
+  const from = $('emp-hist-from').value;
+  const to   = $('emp-hist-to').value;
+  if (!uid) { toast('Select an employee', 'error'); return; }
+  if (!from || !to) { toast('Select date range', 'error'); return; }
+
+  const params = new URLSearchParams({user_id: uid, from, to});
+  const r = await api(`/api/reports/employee-history?${params}`);
+  if (r.status !== 'ok') { toast(r.message, 'error'); return; }
+
+  const d = r.data;
+  const emp = d.employee || {};   // backend returns 'employee' key
+
+  // Profile card
+  const profile = $('emp-hist-profile');
+  profile.style.display = '';
+  $('ehp-photo').src    = emp.photo_path ? '/' + emp.photo_path : '';
+  $('ehp-name').textContent = emp.name || '—';
+  $('ehp-meta').textContent = `${emp.emp_id || '—'} · ${emp.department || '—'} · ${emp.designation || '—'}`;
+  const daysPresent   = d.total_days_present || (d.daily || []).length;
+  const totalPunches  = (d.records || []).length;
+  $('ehp-summary').textContent =
+    `${daysPresent} day${daysPresent !== 1 ? 's' : ''} present · ${totalPunches} punch record${totalPunches !== 1 ? 's' : ''}`;
+
+  // Daily summary table — backend field: total_punches (not punch_count)
+  $('emp-hist-daily').innerHTML = (d.daily || []).length === 0
+    ? `<tr class="empty-row"><td colspan="4">No daily records</td></tr>`
+    : d.daily.map(day => `<tr>
+        <td>${day.date}</td>
+        <td>${day.first_in  ? fmtTime(day.first_in)  : '—'}</td>
+        <td>${day.last_out  ? fmtTime(day.last_out)  : '—'}</td>
+        <td>${day.total_punches ?? day.punch_count ?? '—'}</td>
+      </tr>`).join('');
+
+  // All punch records
+  $('emp-hist-records').innerHTML = (d.records || []).length === 0
+    ? `<tr class="empty-row"><td colspan="5">No punch records</td></tr>`
+    : d.records.map(rec => `<tr>
+        <td>${fmtTime(rec.punch_time)}</td>
+        <td><span class="tag tag-${rec.punch_type.toLowerCase()}">${rec.punch_type}</span></td>
+        <td class="text-gray">${rec.camera_name || '—'}</td>
+        <td>${rec.confidence ? rec.confidence.toFixed(1)+'%' : '—'}</td>
+        <td>${rec.snapshot_path
+          ? `<button class="btn btn-outline btn-xs" onclick="viewSnap('${rec.snapshot_path}','${emp.name || ''}')">👁</button>`
+          : '—'}</td>
+      </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+//  SYSTEM USERS (Admin only)
+// ══════════════════════════════════════════════════════════
+async function loadSysUsers() {
+  const r = await api('/api/admin-users');
+  if (r.status !== 'ok') { $('sysusers-tbody').innerHTML = `<tr class="empty-row"><td colspan="7">Access denied</td></tr>`; return; }
+  const users = r.data;
+  const roleTag = {admin:'tag-absent', manager:'tag-late', guard:'tag-in'};
+  $('sysusers-tbody').innerHTML = users.length === 0
+    ? `<tr class="empty-row"><td colspan="7">No system users</td></tr>`
+    : users.map(u => `<tr>
+        <td><strong>${u.username}</strong></td>
+        <td>${u.full_name || '—'}</td>
+        <td><span class="tag ${roleTag[u.role]||'tag-in'}">${u.role}</span></td>
+        <td class="text-gray">${u.department || '—'}</td>
+        <td class="text-gray">${u.last_login ? fmtTime(u.last_login) : 'Never'}</td>
+        <td><span class="tag ${u.active ? 'tag-active' : 'tag-inactive'}">${u.active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-outline btn-xs" onclick="openEditSysUser(${u.id})">✏</button>
+            <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="deleteSysUser(${u.id})">🗑</button>
+          </div>
+        </td>
+      </tr>`).join('');
+}
+
+function openAddSysUser() {
+  $('modal-sysuser-title').textContent = 'Add System User';
+  $('su-id').value = '';
+  $('su-username').value = '';
+  $('su-fullname').value = '';
+  $('su-password').value = '';
+  $('su-role').value = 'manager';
+  $('su-dept').value = '';
+  $('su-active').value = '1';
+  $('su-pw-hint').textContent = '(required)';
+  $('su-username').removeAttribute('readonly');
+  openModal('modal-sysuser');
+}
+
+async function openEditSysUser(id) {
+  const r = await api('/api/admin-users');
+  if (r.status !== 'ok') return;
+  const u = r.data.find(x => x.id === id);
+  if (!u) return;
+  $('modal-sysuser-title').textContent = 'Edit System User';
+  $('su-id').value       = u.id;
+  $('su-username').value = u.username;
+  $('su-fullname').value = u.full_name || '';
+  $('su-password').value = '';
+  $('su-role').value     = u.role;
+  $('su-dept').value     = u.department || '';
+  $('su-active').value   = String(u.active);
+  $('su-pw-hint').textContent = '(leave blank to keep)';
+  $('su-username').setAttribute('readonly', 'readonly');
+  openModal('modal-sysuser');
+}
+
+async function submitSysUser() {
+  const id       = $('su-id').value;
+  const username = $('su-username').value.trim();
+  const password = $('su-password').value;
+  const role     = $('su-role').value;
+
+  if (!username) { toast('Username required', 'error'); return; }
+  if (!id && !password) { toast('Password required for new user', 'error'); return; }
+  if (password && password.length < 6) { toast('Password must be at least 6 characters', 'error'); return; }
+
+  const data = {
+    username,
+    full_name:  $('su-fullname').value.trim(),
+    role,
+    department: $('su-dept').value.trim(),
+    active:     parseInt($('su-active').value),
+  };
+  if (password) data.password = password;
+
+  const r = id
+    ? await api(`/api/admin-users/${id}`, {method:'PUT',  body:JSON.stringify(data)})
+    : await api('/api/admin-users',        {method:'POST', body:JSON.stringify(data)});
+
+  if (r.status === 'ok') {
+    toast(id ? 'User updated' : 'User created', 'success');
+    closeModal('modal-sysuser');
+    loadSysUsers();
+  } else {
+    toast(r.message, 'error');
+  }
+}
+
+async function deleteSysUser(id) {
+  if (!confirm('Delete this system user? This cannot be undone.')) return;
+  const r = await api(`/api/admin-users/${id}`, {method:'DELETE'});
+  if (r.status === 'ok') { toast('User deleted', 'success'); loadSysUsers(); }
+  else toast(r.message, 'error');
+}
+
+// ══════════════════════════════════════════════════════════
+//  SETTINGS TAB SWITCHER
+// ══════════════════════════════════════════════════════════
+function switchSettingsTab(tab) {
+  ['general','theme','attendance','recognition','cameras','compliance','account','sync'].forEach(t => {
+    const btn = $('stab-'+t), panel = $('spanel-'+t);
+    if (btn)   btn.classList.toggle('active', t === tab);
+    if (panel) panel.classList.toggle('active', t === tab);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  THEME — colour pickers & preset
+// ══════════════════════════════════════════════════════════
+function syncColorInput(which) {
+  // Sync hex text → colour picker
+  const hex   = $('theme-'+which+'-hex').value.trim();
+  const picker = $('theme-'+which);
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    picker.value = hex;
+    _updateThemeSwatches();
+    _applyThemeLive();
+  }
+}
+
+$('theme-primary') && $('theme-primary').addEventListener('input', function() {
+  $('theme-primary-hex').value = this.value;
+  _updateThemeSwatches(); _applyThemeLive();
+});
+$('theme-accent') && $('theme-accent').addEventListener('input', function() {
+  $('theme-accent-hex').value = this.value;
+  _updateThemeSwatches(); _applyThemeLive();
+});
+
+function _updateThemeSwatches() {
+  const pc = $('theme-primary'), ac = $('theme-accent');
+  if (pc) { $('theme-primary-swatch') && ($('theme-primary-swatch').style.background = pc.value); }
+  if (ac) { $('theme-accent-swatch')  && ($('theme-accent-swatch').style.background  = ac.value); }
+  // Live preview boxes
+  $('prev-primary') && ($('prev-primary').style.background = pc ? pc.value : '');
+  $('prev-accent')  && ($('prev-accent').style.background  = ac ? ac.value : '');
+}
+
+function _applyThemeLive() {
+  const pc = $('theme-primary'); const ac = $('theme-accent');
+  if (pc) {
+    document.documentElement.style.setProperty('--blue', pc.value);
+    // Derive blue-dark (darken ~15%)
+    document.documentElement.style.setProperty('--blue-dark', _darken(pc.value, 0.15));
+    document.documentElement.style.setProperty('--blue-light', _lighten(pc.value, 0.88));
+  }
+  if (ac) {
+    document.documentElement.style.setProperty('--green', ac.value);
+    document.documentElement.style.setProperty('--green-light', _lighten(ac.value, 0.88));
+  }
+}
+
+function _darken(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, (n>>16) - Math.round(255*amount));
+  const g = Math.max(0, ((n>>8)&0xff) - Math.round(255*amount));
+  const b = Math.max(0, (n&0xff) - Math.round(255*amount));
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function _lighten(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, (n>>16) + Math.round(255*amount));
+  const g = Math.min(255, ((n>>8)&0xff) + Math.round(255*amount));
+  const b = Math.min(255, (n&0xff) + Math.round(255*amount));
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function applyPreset(primary, accent) {
+  const pp = $('theme-primary'), ap = $('theme-accent');
+  if (pp) { pp.value = primary; $('theme-primary-hex').value = primary; }
+  if (ap) { ap.value = accent;  $('theme-accent-hex').value  = accent; }
+  _updateThemeSwatches();
+  _applyThemeLive();
+}
+
+async function saveTheme() {
+  const pc  = $('theme-primary-hex').value || $('theme-primary')?.value;
+  const ac  = $('theme-accent-hex').value  || $('theme-accent')?.value;
+  const ot  = $('theme-org-title')?.value  || '';
+  const on2 = $('theme-org-name')?.value   || '';
+  const r   = await api('/api/settings/theme', {
+    method: 'PUT',
+    body: JSON.stringify({ primary_color: pc, accent_color: ac, org_title: ot, org_name: on2 })
+  });
+  if (r.status === 'ok') {
+    toast('Theme saved ✅', 'success');
+    if (ot) document.title = ot;
+  } else {
+    toast(r.message, 'error');
+  }
+}
+
+async function uploadFavicon(input) {
+  const file = input.files[0]; if (!file) return;
+  const fd   = new FormData(); fd.append('favicon', file);
+  const r    = await fetch('/api/settings/favicon', {method:'POST', body:fd}).then(x=>x.json());
+  const msg  = $('favicon-msg');
+  if (r.status === 'ok') {
+    const src = '/' + r.data.favicon_path + '?t=' + Date.now();
+    const fp  = $('favicon-preview'); if (fp) { fp.src = src; fp.style.display='block'; }
+    // Update <link rel="icon">
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) { link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+    link.href = src;
+    if (msg) msg.innerHTML = '<p style="color:var(--green);font-size:13px">✅ Favicon uploaded</p>';
+    toast('Favicon uploaded', 'success');
+  } else {
+    if (msg) msg.innerHTML = `<p style="color:var(--red);font-size:13px">❌ ${r.message}</p>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  HOLIDAY CALENDAR
+// ══════════════════════════════════════════════════════════
+const HOL_TYPE_STYLE = {
+  national:   'background:#fde8e8;color:#c81e1e',
+  state:      'background:#fdf6b2;color:#c27803',
+  restricted: 'background:#ebf5ff;color:#1a56db',
+  office:     'background:#def7ec;color:#057a55',
+};
+const HOL_TYPE_LABEL = {
+  national:'National Holiday', state:'State Holiday',
+  restricted:'Restricted Holiday', office:'Office Closure'
+};
+const DAYS = ['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function initHolidays() {
+  const sel = $('hol-year');
+  if (sel && !sel.options.length) {
+    const yr = new Date().getFullYear();
+    for (let y = yr - 1; y <= yr + 2; y++) {
+      sel.add(new Option(y, y, y === yr, y === yr));
+    }
+  }
+  loadHolidays();
+}
+
+async function loadHolidays() {
+  const year = $('hol-year') ? $('hol-year').value : new Date().getFullYear();
+  const r = await api(`/api/holidays?year=${year}`);
+  if (r.status !== 'ok') return;
+
+  const rows = r.data;
+  $('hol-tbody').innerHTML = rows.length === 0
+    ? `<tr class="empty-row"><td colspan="5">No holidays for ${year}. Click "Seed 2025 Govt Holidays" to pre-fill.</td></tr>`
+    : rows.map(h => {
+        const day  = new Date(h.date).getDay(); // 0=Sun
+        const isoD = new Date(h.date).getDay() === 0 ? 7 : new Date(h.date).getDay(); // 1=Mon…7=Sun
+        const isWE = isoD >= 6;
+        return `<tr ${isWE ? 'style="opacity:.55"' : ''}>
+          <td><strong>${h.date}</strong></td>
+          <td class="text-gray">${DAYS[isoD] || '—'} ${isWE ? '<span class="tag" style="font-size:10px;background:var(--gray-100)">Weekend</span>':''}</td>
+          <td>${h.name}</td>
+          <td><span class="tag" style="${HOL_TYPE_STYLE[h.type]||''}">${HOL_TYPE_LABEL[h.type]||h.type}</span></td>
+          <td class="nav-role-manager">
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-outline btn-xs" onclick="openEditHoliday(${h.id},'${h.date}','${h.name.replace(/'/g,"\\'")}','${h.type}')">✏</button>
+              <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="deleteHoliday(${h.id})">🗑</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+
+  // Monthly working-day impact grid
+  const card = $('hol-summary-card');
+  if (card) {
+    card.style.display = '';
+    const byMonth = {};
+    rows.forEach(h => {
+      const m = h.date.slice(0,7);
+      if (!byMonth[m]) byMonth[m] = 0;
+      byMonth[m]++;
+    });
+    $('hol-monthly-grid').innerHTML = Array.from({length:12}, (_,i)=>{
+      const m   = `${year}-${String(i+1).padStart(2,'0')}`;
+      const cnt = byMonth[m] || 0;
+      const mon = new Date(year,i,1).toLocaleString('en-IN',{month:'short'});
+      return `<div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--gray-200);text-align:center">
+        <div style="font-size:12px;font-weight:600;color:var(--gray-600)">${mon}</div>
+        <div style="font-size:20px;font-weight:700;color:${cnt?'var(--red)':'var(--green)'};margin-top:4px">${cnt}</div>
+        <div style="font-size:10px;color:var(--gray-400)">${cnt===1?'holiday':cnt===0?'No holidays':'holidays'}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function openAddHoliday() {
+  $('modal-hol-title').textContent = 'Add Holiday';
+  $('hf-id').value = '';
+  $('hf-date').value = new Date().toISOString().split('T')[0];
+  $('hf-name').value = '';
+  $('hf-type').value = 'national';
+  openModal('modal-holiday');
+}
+
+function openEditHoliday(id, date, name, type) {
+  $('modal-hol-title').textContent = 'Edit Holiday';
+  $('hf-id').value   = id;
+  $('hf-date').value = date;
+  $('hf-name').value = name;
+  $('hf-type').value = type;
+  openModal('modal-holiday');
+}
+
+async function submitHoliday() {
+  const id   = $('hf-id').value;
+  const date = $('hf-date').value;
+  const name = $('hf-name').value.trim();
+  const type = $('hf-type').value;
+  if (!date || !name) { toast('Date and name required', 'error'); return; }
+  const body = JSON.stringify({date, name, type});
+  const r = id
+    ? await api(`/api/holidays/${id}`, {method:'PUT',  body})
+    : await api('/api/holidays',         {method:'POST', body});
+  if (r.status === 'ok') {
+    toast(id ? 'Holiday updated' : 'Holiday added', 'success');
+    closeModal('modal-holiday');
+    loadHolidays();
+  } else toast(r.message, 'error');
+}
+
+async function deleteHoliday(id) {
+  if (!confirm('Delete this holiday?')) return;
+  const r = await api(`/api/holidays/${id}`, {method:'DELETE'});
+  if (r.status === 'ok') { toast('Deleted', 'success'); loadHolidays(); }
+  else toast(r.message, 'error');
+}
+
+async function seedIndiaHolidays() {
+  // Central Government of India 2025 gazetted holidays
+  const holidays = [
+    {date:'2025-01-26', name:'Republic Day',                         type:'national'},
+    {date:'2025-03-31', name:'Id-ul-Fitr (Eid)',                     type:'national'},
+    {date:'2025-04-10', name:'Mahavir Jayanti',                      type:'national'},
+    {date:'2025-04-14', name:'Dr. Ambedkar Jayanti',                 type:'national'},
+    {date:'2025-04-18', name:'Good Friday',                          type:'national'},
+    {date:'2025-05-12', name:'Buddha Purnima',                       type:'national'},
+    {date:'2025-06-07', name:'Id-ul-Zuha (Bakrid)',                  type:'national'},
+    {date:'2025-07-06', name:'Muharram',                             type:'national'},
+    {date:'2025-08-15', name:'Independence Day',                     type:'national'},
+    {date:'2025-09-05', name:'Milad-un-Nabi (Prophet\'s Birthday)',  type:'national'},
+    {date:'2025-10-02', name:'Gandhi Jayanti / Dussehra',            type:'national'},
+    {date:'2025-10-20', name:'Diwali (Deepavali)',                   type:'national'},
+    {date:'2025-11-05', name:'Guru Nanak Jayanti',                   type:'national'},
+    {date:'2025-12-25', name:'Christmas Day',                        type:'national'},
+  ];
+  let added = 0;
+  for (const h of holidays) {
+    const r = await api('/api/holidays', {method:'POST', body: JSON.stringify(h)});
+    if (r.status === 'ok') added++;
+  }
+  toast(`${added} holidays added (duplicates skipped)`, 'success');
+  loadHolidays();
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUDIT LOG
+// ══════════════════════════════════════════════════════════
+function initAuditLog() {
+  const today = new Date().toISOString().split('T')[0];
+  const week  = new Date(Date.now() - 7*86400000).toISOString().split('T')[0];
+  if (!$('audit-from').value) $('audit-from').value = week;
+  if (!$('audit-to').value)   $('audit-to').value   = today;
+  loadAuditLog();
+}
+
+async function loadAuditLog(page = 1) {
+  state.auditPage = page;
+  const from = $('audit-from').value, to = $('audit-to').value;
+  const user = $('audit-user').value;
+  const params = new URLSearchParams({from, to, page, per_page: 50});
+  if (user) params.set('username', user);
+  const r = await api(`/api/audit-log?${params}`);
+  if (r.status !== 'ok') {
+    $('audit-tbody').innerHTML = `<tr class="empty-row"><td colspan="7">Access denied — admin only</td></tr>`;
+    return;
+  }
+
+  // Populate user filter dropdown
+  const sel = $('audit-user');
+  if (sel && r.data.users) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All Users</option>' +
+      r.data.users.map(u=>`<option value="${u}">${u}</option>`).join('');
+    sel.value = prev;
+  }
+
+  const ACTION_STYLE = {
+    'LOGIN':         'tag-in',
+    'LOGOUT':        '',
+    'LOGIN_FAILED':  'tag-absent',
+    'CHANGE_PASSWORD':'tag-late',
+    'ADD_HOLIDAY':   'tag-in',
+    'DELETE_HOLIDAY':'tag-absent',
+    'UPLOAD_FAVICON':'',
+    'SAVE_THEME':    '',
+  };
+
+  $('audit-tbody').innerHTML = r.data.records.length === 0
+    ? `<tr class="empty-row"><td colspan="7">No audit records found</td></tr>`
+    : r.data.records.map(a => {
+        const cls = ACTION_STYLE[a.action] || (a.action.includes('DELETE')||a.action.includes('FAIL')?'tag-absent':a.action.includes('EDIT')?'tag-late':'');
+        return `<tr>
+          <td style="white-space:nowrap">${fmtTime(a.created_at)}</td>
+          <td><strong>${a.username}</strong></td>
+          <td><span class="tag" style="background:var(--gray-100);color:var(--gray-700)">${a.role||'—'}</span></td>
+          <td><span class="tag ${cls}" style="font-size:10.5px">${a.action}</span></td>
+          <td class="text-gray">${a.target||'—'}</td>
+          <td class="text-gray text-xs" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.detail||''}">${a.detail||'—'}</td>
+          <td class="text-gray text-xs">${a.ip_address||'—'}</td>
+        </tr>`;
+      }).join('');
+
+  renderPagination('audit-pagination', page, r.data.pages, loadAuditLog);
+}
+
+// ══════════════════════════════════════════════════════════
+//  SESSION TIMEOUT (auto-logout on idle)
+// ══════════════════════════════════════════════════════════
+(function initSessionTimeout() {
+  let _timer = null;
+  let _mins  = 0;
+
+  function resetTimer() {
+    if (!_mins) return;
+    clearTimeout(_timer);
+    _timer = setTimeout(async () => {
+      toast('Session expired — logging out…', 'info');
+      await new Promise(r => setTimeout(r, 1500));
+      await api('/api/auth/logout', {method:'POST'});
+      window.location.href = '/login';
+    }, _mins * 60 * 1000);
+  }
+
+  // Load timeout from settings after page is ready
+  window.addEventListener('load', async () => {
+    const r = await api('/api/settings');
+    if (r.status === 'ok') {
+      const st = r.data.settings.find(s => s.key === 'session_timeout');
+      _mins = st ? parseInt(st.value) : 30;
+      if (_mins > 0) {
+        ['mousemove','keydown','click','scroll','touchstart'].forEach(ev =>
+          document.addEventListener(ev, resetTimer, {passive:true})
+        );
+        resetTimer();
+      }
+    }
+  });
+})();
+
+// Apply saved theme colours on page load
+(async function applyStoredTheme() {
+  const r = await api('/api/settings');
+  if (r.status !== 'ok') return;
+  const smap = {};
+  r.data.settings.forEach(s => smap[s.key] = s.value);
+  if (smap.primary_color) {
+    document.documentElement.style.setProperty('--blue', smap.primary_color);
+    document.documentElement.style.setProperty('--blue-dark',  _darken(smap.primary_color, 0.15));
+    document.documentElement.style.setProperty('--blue-light', _lighten(smap.primary_color, 0.88));
+  }
+  if (smap.accent_color) {
+    document.documentElement.style.setProperty('--green', smap.accent_color);
+    document.documentElement.style.setProperty('--green-light', _lighten(smap.accent_color, 0.88));
+  }
+  if (smap.org_title) document.title = smap.org_title;
+  if (smap.favicon_path) {
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) { link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+    link.href = '/' + smap.favicon_path + '?t=' + Date.now();
+  }
+})();
+
+// ══════════════════════════════════════════════════════════
+//  CLOUD SYNC
+// ══════════════════════════════════════════════════════════
+async function loadSyncStatus() {
+  // Unsynced record counts
+  const sc = await api('/api/sync/local-status');
+  if (sc.status === 'ok') {
+    const el1 = $('sync-pending-att'); if(el1) el1.textContent = sc.data.pending_attendance ?? '—';
+    const el2 = $('sync-pending-unk'); if(el2) el2.textContent = sc.data.pending_unknown ?? '—';
+  }
+  // Last push/pull timestamps from sync_log
+  const sl = await api('/api/sync/log');
+  if (sl.status === 'ok') {
+    const pushRows = sl.data.filter(x => x.direction === 'PUSH' && x.status === 'ok');
+    const pullRows = sl.data.filter(x => x.direction === 'PULL' && x.status === 'ok');
+    const lp = $('sync-last-push'); if(lp) lp.textContent = (pushRows[0]?.synced_at || '—').slice(0,16);
+    const ll = $('sync-last-pull'); if(ll) ll.textContent = (pullRows[0]?.synced_at || '—').slice(0,16);
+    // Populate log list
+    const el = $('sync-log-list');
+    if (el && sl.data.length) {
+      el.innerHTML = sl.data.slice(0,20).map(row => {
+        const icon = row.status === 'ok' ? '✅' : '❌';
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--gray-100);display:flex;gap:6px;align-items:baseline">
+          <span>${icon}</span>
+          <span style="flex:1">${row.direction} ${row.entity} · <strong>${row.records}</strong></span>
+          <span style="color:var(--gray-400);white-space:nowrap">${(row.synced_at||'').slice(0,16)}</span>
+        </div>`;
+      }).join('');
+    } else if (el) {
+      el.innerHTML = '<p class="text-xs text-gray">No sync events yet.</p>';
+    }
+  }
+}
+
+function loadSyncLog() {
+  loadSyncStatus();  // loadSyncStatus now handles both counts and log list
+}
+
+async function testSyncConnection() {
+  const msg = $('sync-test-msg');
+  if (msg) msg.innerHTML = '<span style="color:var(--gray-400)">Testing…</span>';
+  const r = await api('/api/sync/test-connection', {method:'POST'});
+  if (msg) {
+    msg.innerHTML = r.status === 'ok'
+      ? `<span style="color:var(--green)">✅ ${r.message}</span>`
+      : `<span style="color:var(--red)">❌ ${r.message}</span>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOGO LOAD in Settings
+// ══════════════════════════════════════════════════════════
+function _refreshLogoUI(logoPath) {
+  const preview = $('logo-preview');
+  const placeholder = $('logo-placeholder-icon');
+  const removeBtn = $('btn-remove-logo');
+  const hl = $('header-logo');
+  if (logoPath) {
+    const src = '/' + logoPath + '?t=' + Date.now();
+    if (preview) { preview.src = src; preview.style.display = 'block'; }
+    if (placeholder) placeholder.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = '';
+    if (hl) { hl.src = src; hl.style.display = 'block'; }
+  } else {
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+    if (placeholder) placeholder.style.display = 'flex';
+    if (removeBtn) removeBtn.style.display = 'none';
+    if (hl) { hl.src = ''; hl.style.display = 'none'; }
+  }
+}
+
+</script>
+</body>
+</html>

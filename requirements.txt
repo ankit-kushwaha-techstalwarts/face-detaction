@@ -1,0 +1,27 @@
+# FaceAttend — Python dependencies
+# No C++ compilation required. Pure pip install.
+# Install with: pip install -r requirements.txt
+
+flask>=2.3.0
+opencv-python>=4.8.0
+insightface>=0.7.3
+onnxruntime>=1.16.0
+numpy>=1.24.0
+werkzeug>=2.3.0
+Pillow>=10.0.0
+cryptography>=41.0.0
+
+# ── Production WSGI servers (500+ users) ─────────────────────
+# waitress: cross-platform (Windows + Linux + Mac)
+waitress>=3.0.0
+# gunicorn: Linux/Mac only — used by run.sh for multi-worker production
+gunicorn>=21.2.0
+
+# ── Cloud sync (local site → cloud portal) ───────────────────
+# HTTP client used by sync_agent.py to push records to cloud
+requests>=2.31.0
+
+# ── Cloud portal only (install on cloud server, not local) ───
+# PostgreSQL adapter — only needed when DATABASE_URL + CLOUD_MODE=1 are set
+# Uncomment on the cloud server:
+# psycopg2-binary>=2.9.9

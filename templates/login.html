@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Login — FaceAttend</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1a56db;--blue-dark:#1e429f;--blue-light:#ebf5ff;
+  --green:#057a55;--red:#c81e1e;--red-light:#fde8e8;
+  --gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-400:#9ca3af;
+  --gray-600:#4b5563;--gray-700:#374151;--gray-800:#1f2937;
+}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:linear-gradient(135deg,#1e3a5f 0%,#1a56db 100%);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+}
+.login-wrap{
+  background:#fff;border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+  width:420px;max-width:95vw;overflow:hidden;
+}
+.login-header{
+  background:linear-gradient(135deg,#1e3a5f,#1a56db);
+  padding:32px 36px 28px;text-align:center;
+}
+.login-logo{
+  width:64px;height:64px;background:rgba(255,255,255,.15);
+  border-radius:14px;display:grid;place-items:center;
+  font-size:30px;font-weight:800;color:#fff;
+  margin:0 auto 14px;letter-spacing:-1px;
+}
+#org-logo-img{
+  width:64px;height:64px;border-radius:14px;
+  object-fit:contain;background:rgba(255,255,255,.1);
+  margin:0 auto 14px;display:block;
+}
+.login-header h1{color:#fff;font-size:20px;font-weight:700}
+.login-header p{color:rgba(255,255,255,.7);font-size:13px;margin-top:4px}
+.login-body{padding:32px 36px}
+.form-group{margin-bottom:18px}
+.form-group label{display:block;font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px}
+.form-group input{
+  width:100%;border:1.5px solid var(--gray-200);border-radius:8px;
+  padding:10px 14px;font-size:14px;transition:border-color .2s;
+}
+.form-group input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,86,219,.1)}
+.input-wrap{position:relative}
+.input-wrap input{padding-right:42px}
+.eye-btn{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;font-size:16px;color:var(--gray-400);
+  padding:2px;
+}
+.btn-login{
+  width:100%;background:var(--blue);color:#fff;border:none;
+  padding:12px;border-radius:8px;font-size:15px;font-weight:600;
+  cursor:pointer;transition:all .2s;margin-top:6px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-login:hover{background:var(--blue-dark)}
+.btn-login:disabled{opacity:.6;cursor:not-allowed}
+.error-msg{
+  background:var(--red-light);color:var(--red);
+  border-radius:8px;padding:10px 14px;font-size:13.5px;
+  margin-bottom:16px;display:none;
+}
+.login-footer{
+  text-align:center;padding:0 36px 28px;
+  font-size:12px;color:var(--gray-400);
+}
+.loader{
+  display:inline-block;width:16px;height:16px;
+  border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-header">
+    <div id="logo-wrap">
+      <!-- Replaced with org logo if set -->
+      <div class="login-logo" id="logo-placeholder">FA</div>
+    </div>
+    <h1 id="org-name">FaceAttend</h1>
+    <p>Government Department Attendance System</p>
+  </div>
+
+  <div class="login-body">
+    <div class="error-msg" id="error-msg"></div>
+
+    <form id="login-form" onsubmit="doLogin(event)">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="Enter username"
+               autocomplete="username" required autofocus/>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="password" placeholder="Enter password"
+                 autocomplete="current-password" required/>
+          <button type="button" class="eye-btn" onclick="togglePw(this)" tabindex="-1">👁</button>
+        </div>
+      </div>
+      <button type="submit" class="btn-login" id="login-btn">
+        🔐 Sign In
+      </button>
+    </form>
+  </div>
+
+  <div class="login-footer">
+    Default credentials: <strong>admin</strong> / <strong>admin123</strong><br>
+    Change password in Settings after first login.
+  </div>
+</div>
+
+<script>
+// Load org branding
+(async () => {
+  try {
+    const r = await fetch('/api/settings').then(x=>x.json()).catch(()=>null);
+    if (!r || r.status !== 'ok') return;
+    const settings = {};
+    r.data.settings.forEach(s => settings[s.key] = s.value);
+    if (settings.org_name) document.getElementById('org-name').textContent = settings.org_name;
+    if (settings.org_logo) {
+      const img = document.createElement('img');
+      img.id  = 'org-logo-img';
+      img.src = '/' + settings.org_logo;
+      img.onerror = () => img.style.display = 'none';
+      const wrap = document.getElementById('logo-wrap');
+      wrap.innerHTML = '';
+      wrap.appendChild(img);
+    }
+  } catch(e) {}
+})();
+
+function togglePw(btn) {
+  const inp = btn.previousElementSibling;
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const btn  = document.getElementById('login-btn');
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Signing in…';
+
+  const r = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      username: document.getElementById('username').value.trim(),
+      password: document.getElementById('password').value
+    })
+  }).then(x=>x.json()).catch(()=>({status:'error',message:'Server unreachable'}));
+
+  if (r.status === 'ok') {
+    btn.innerHTML = '✅ Success! Redirecting…';
+    window.location.href = '/';
+  } else {
+    errEl.textContent   = r.message || 'Login failed';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.innerHTML = '🔐 Sign In';
+    document.getElementById('password').value = '';
+    document.getElementById('password').focus();
+  }
+}
+</script>
+</body>
+</html>

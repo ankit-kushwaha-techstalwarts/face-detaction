@@ -1,0 +1,7 @@
+emp_id,name,department,designation,email,phone
+EMP001,Rajesh Kumar,Administration,Section Officer,rajesh@dept.gov.in,9876543210
+EMP002,Priya Sharma,Finance,Accounts Officer,priya@dept.gov.in,9876543211
+EMP003,Amit Singh,IT,System Administrator,amit@dept.gov.in,9876543212
+EMP004,Sunita Devi,HR,HR Manager,sunita@dept.gov.in,9876543213
+EMP005,Mohan Lal,Operations,Junior Engineer,mohan@dept.gov.in,9876543214
+EMP006,Kavita Patel,Security,Security Inspector,kavita@dept.gov.in,9876543215
