@@ -58,6 +58,16 @@ def get_insight_app():
     if _insight_app is None:
         with _insight_lock:
             if _insight_app is None:
+                # Limit ONNX Runtime / OpenMP thread pools before loading the model.
+                # Default is one thread per CPU core; on a 20-core machine with 4 cameras
+                # running simultaneous inference that creates 80 hot threads (load > 28).
+                # These env vars must be set before onnxruntime initialises its thread pool.
+                import os as _os
+                for _k in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                           'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+                    _os.environ.setdefault(_k, '4')
+                _os.environ.setdefault('OMP_WAIT_POLICY', 'PASSIVE')
+
                 log.info("[InsightFace] Loading model (first run downloads ~500 MB)…")
                 app = FaceAnalysis(
                     name='buffalo_sc',          # lightweight model (~100 MB)
