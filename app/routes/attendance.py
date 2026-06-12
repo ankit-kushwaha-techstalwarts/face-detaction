@@ -22,8 +22,10 @@ GET    /api/reports/employee-history — Single employee history
 """
 
 import logging
+import os
 from datetime import datetime
 
+import numpy as np
 from flask import Blueprint, request, Response, current_app
 
 from app.middleware import login_required, role_required, safe_page
@@ -138,6 +140,73 @@ def bulk_delete_unknown():
     deleted  = att_dao.bulk_delete_unknown(ids, base_dir)
     audit('BULK_DELETE_UNKNOWN', '', f'ids={ids}')
     return ok({'deleted': deleted}, f'{deleted} record(s) deleted')
+
+
+@attendance_bp.route('/api/unknown-faces/<int:fid>/assign', methods=['POST'])
+@role_required('admin', 'manager')
+def assign_unknown(fid):
+    """
+    Link an unknown-face snapshot to an employee and blend it into that
+    employee's stored face encoding, so future captures of this person are
+    recognised instead of logged as Unknown.
+    """
+    data    = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return err('user_id is required')
+
+    uf = att_dao.get_unknown_face(fid)
+    if not uf:
+        return err('Unknown face record not found', 404)
+
+    user = user_dao.get_user_with_encoding(user_id)
+    if not user:
+        return err('Employee not found', 404)
+
+    base_dir = current_app.config['BASE_DIR']
+    path = os.path.join(base_dir, uf['snapshot_path']) if uf['snapshot_path'] else None
+    if not path or not os.path.exists(path):
+        return err('Snapshot image is missing')
+
+    new_enc = current_app.encode_face(path)
+    if new_enc is None:
+        return err('No face detected in this snapshot')
+
+    if user['face_encoding']:
+        old_enc = current_app.blob_to_encoding(user['face_encoding']).astype(np.float32)
+        merged  = old_enc + new_enc
+    else:
+        merged = new_enc
+    merged = merged / np.linalg.norm(merged)
+
+    user_dao.update_user_face_encoding(user_id, current_app.encoding_to_blob(merged.astype(np.float32)))
+    att_dao.mark_unknown_assigned(fid, uf['cluster_id'], f"Assigned to {user['name']}")
+    current_app.face_cache.reload()
+    audit('ASSIGN_UNKNOWN', str(fid), f"user_id={user_id}")
+    return ok(msg=f"Face assigned to {user['name']} — recognition updated")
+
+
+@attendance_bp.route('/api/unknown-faces/persons', methods=['GET'])
+@login_required
+def list_unknown_persons():
+    """Group unknown-face captures by visitor (face-similarity cluster)."""
+    page, per_page = safe_page(
+        request.args.get('page', 1),
+        request.args.get('per_page', 24),
+        max_per_page=200,
+    )
+    result = att_dao.list_unknown_persons(page=page, per_page=per_page)
+    return ok(result)
+
+
+@attendance_bp.route('/api/unknown-faces/persons/<cluster_id>', methods=['GET'])
+@login_required
+def unknown_person_visits(cluster_id):
+    """Full visit timeline for one unidentified-visitor cluster."""
+    records = att_dao.unknown_person_visits(cluster_id)
+    if not records:
+        return err('Visitor not found', 404)
+    return ok({'records': records})
 
 
 # ── Reports ────────────────────────────────────────────────────────────────────

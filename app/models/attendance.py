@@ -122,6 +122,7 @@ def list_unknown_faces(
 ) -> dict:
     sql  = (
         'SELECT uf.id, uf.snapshot_path, uf.detected_at, uf.reviewed, uf.notes, '
+        '       uf.cluster_id, uf.punch_type, '
         '       c.name AS camera_name, c.location '
         'FROM unknown_faces uf '
         'LEFT JOIN cameras c ON c.id = uf.camera_id '
@@ -147,6 +148,90 @@ def review_unknown(fid: int, notes: str) -> None:
             f'UPDATE unknown_faces SET reviewed=1, notes={PH} WHERE id={PH}',
             (notes, fid),
         )
+
+
+def get_unknown_face(fid: int) -> Optional[dict]:
+    """Fetch snapshot_path + cluster_id for one unknown-face record."""
+    with get_db() as conn:
+        row = conn.execute(
+            f'SELECT id, snapshot_path, cluster_id FROM unknown_faces WHERE id={PH}',
+            (fid,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_unknown_assigned(fid: int, cluster_id: Optional[str], notes: str) -> None:
+    """
+    Mark an unknown-face capture as reviewed/assigned.
+    If it belongs to a cluster, mark every capture in that cluster
+    (same unidentified visitor, now identified).
+    """
+    with get_db() as conn:
+        if cluster_id:
+            conn.execute(
+                f'UPDATE unknown_faces SET reviewed=1, notes={PH} WHERE cluster_id={PH}',
+                (notes, cluster_id),
+            )
+        else:
+            conn.execute(
+                f'UPDATE unknown_faces SET reviewed=1, notes={PH} WHERE id={PH}',
+                (notes, fid),
+            )
+
+
+# ── Unknown visitors (grouped by face-similarity cluster) ──────────────────────
+
+def list_unknown_persons(page: int = 1, per_page: int = 24) -> dict:
+    """
+    Group unknown-face captures by visitor (face-similarity cluster) and
+    show how many times each unidentified person has been seen, with their
+    IN/OUT counts — like a mini attendance log for unrecognised visitors.
+    """
+    sql = (
+        'SELECT uf.cluster_id, uf.snapshot_path, uf.detected_at AS last_seen, '
+        '       c.name AS camera_name, c.location, '
+        '       g.visit_count, g.in_count, g.out_count, g.first_seen, g.unreviewed_count '
+        'FROM unknown_faces uf '
+        'JOIN ('
+        '    SELECT cluster_id, '
+        "           COUNT(*)                                          AS visit_count, "
+        "           SUM(CASE WHEN punch_type='IN'  THEN 1 ELSE 0 END)  AS in_count, "
+        "           SUM(CASE WHEN punch_type='OUT' THEN 1 ELSE 0 END)  AS out_count, "
+        '           MIN(detected_at)                                   AS first_seen, '
+        '           MAX(id)                                            AS latest_id, '
+        '           SUM(CASE WHEN reviewed=0 THEN 1 ELSE 0 END)        AS unreviewed_count '
+        '    FROM unknown_faces '
+        '    WHERE cluster_id IS NOT NULL '
+        '    GROUP BY cluster_id'
+        ') g ON g.latest_id = uf.id '
+        'LEFT JOIN cameras c ON c.id = uf.camera_id '
+        'ORDER BY uf.detected_at DESC'
+    )
+
+    with get_db() as conn:
+        total = conn.execute(
+            'SELECT COUNT(DISTINCT cluster_id) FROM unknown_faces WHERE cluster_id IS NOT NULL'
+        ).fetchone()[0]
+        rows = conn.execute(
+            sql + f' LIMIT {per_page} OFFSET {(page - 1) * per_page}'
+        ).fetchall()
+
+    return {'records': [dict(r) for r in rows], 'total': total}
+
+
+def unknown_person_visits(cluster_id: str) -> list:
+    """Full visit timeline for one unidentified-visitor cluster."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT uf.id, uf.snapshot_path, uf.detected_at, uf.punch_type, uf.reviewed, '
+            '       c.name AS camera_name, c.location '
+            'FROM unknown_faces uf '
+            'LEFT JOIN cameras c ON c.id = uf.camera_id '
+            f'WHERE uf.cluster_id={PH} '
+            'ORDER BY uf.detected_at DESC',
+            (cluster_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def delete_unknown(fid: int, base_dir: str) -> None:
@@ -221,6 +306,10 @@ def dashboard_stats(camera_manager) -> dict:
         unknown_cnt = conn.execute(
             f"SELECT COUNT(*) FROM unknown_faces WHERE DATE(detected_at)={PH}",
             (today,),
+        ).fetchone()[0]
+
+        unknown_unreviewed_total = conn.execute(
+            'SELECT COUNT(*) FROM unknown_faces WHERE reviewed=0'
         ).fetchone()[0]
 
         late_count = conn.execute(
@@ -304,6 +393,7 @@ def dashboard_stats(camera_manager) -> dict:
         'absent_today':    total_emp - present,
         'late_today':      late_count,
         'unknown_today':   unknown_cnt,
+        'unknown_unreviewed_total': unknown_unreviewed_total,
         'dept_stats':      [dict(r) for r in dept_stats],
         'recent_activity': [dict(r) for r in recent],
         'weekly_trend':    trend,

@@ -10,6 +10,7 @@ import numpy as np
 import pickle
 import threading
 import time
+import uuid
 import logging
 from datetime import datetime
 
@@ -267,11 +268,7 @@ class CameraWorker(threading.Thread):
 
     def run(self):
         self.running = True
-        tol          = float(get_setting('recognition_tol',   '0.40'))
-        frame_skip   = int(get_setting('frame_skip',          '5'))
-        save_snap    = int(get_setting('snapshot_save',       '1'))
-        unk_detect   = int(get_setting('unknown_detection',   '1'))  # master ON/OFF
-        save_unk     = int(get_setting('unknown_save',        '1'))
+        frame_skip   = int(get_setting('frame_skip', '5'))
 
         log.info(f"[Camera {self.camera_id}] Connecting → {self.rtsp_url}")
         cap = self._open_capture(self.rtsp_url)
@@ -310,6 +307,14 @@ class CameraWorker(threading.Thread):
             if not FACE_LIB_AVAILABLE:
                 continue
 
+            # Re-read tunables on every detection cycle so Settings changes
+            # apply to already-running cameras without an app restart.
+            tol        = float(get_setting('recognition_tol', '0.40'))
+            frame_skip = int(get_setting('frame_skip',        '5'))
+            save_snap  = int(get_setting('snapshot_save',     '1'))
+            unk_detect = int(get_setting('unknown_detection', '1'))  # master ON/OFF
+            save_unk   = int(get_setting('unknown_save',      '1'))
+
             faces      = get_faces_from_frame(frame)
             detections = []
 
@@ -325,7 +330,7 @@ class CameraWorker(threading.Thread):
                     if unk_detect and save_unk:
                         if not self._is_duplicate_unknown(enc):
                             snap = save_snapshot(frame, f'unk_cam{self.camera_id}', UNKNOWN_DIR)
-                            self._log_unknown(snap)
+                            self._log_unknown(snap, enc)
                             log.info(f"[Camera {self.camera_id}] New unknown face saved.")
 
             annotated = draw_boxes(frame.copy(), detections)
@@ -422,11 +427,61 @@ class CameraWorker(threading.Thread):
             return 'IN'
         return 'OUT'
 
-    def _log_unknown(self, snap_path: str):
+    def _assign_unknown_cluster(self, enc: np.ndarray) -> str:
+        """
+        Group this unknown face with previous captures of the same person.
+        Compares against recently-saved unknown-face embeddings; if one is
+        similar enough, reuse its cluster_id (same unidentified visitor),
+        otherwise start a new cluster.
+        """
+        sim_thr = float(get_setting('unknown_sim_threshold', str(self.UNKNOWN_SIM_THRESH)))
+        conn = get_db()
+        rows = conn.execute('''
+            SELECT cluster_id, face_encoding FROM unknown_faces
+            WHERE face_encoding IS NOT NULL AND cluster_id IS NOT NULL
+            ORDER BY id DESC LIMIT 500
+        ''').fetchall()
+        conn.close()
+
+        best_sim, best_cluster = 0.0, None
+        for row in rows:
+            try:
+                other = pickle.loads(row['face_encoding'])
+            except Exception:
+                continue
+            sim = cosine_similarity(enc, other)
+            if sim > best_sim:
+                best_sim, best_cluster = sim, row['cluster_id']
+
+        if best_cluster and best_sim >= sim_thr:
+            return best_cluster
+        return uuid.uuid4().hex[:12]
+
+    def _determine_unknown_punch(self, cluster_id: str) -> str:
+        """Same IN/OUT alternation logic as _determine_punch, but for an
+        unidentified visitor's cluster instead of an enrolled user_id."""
+        if self.direction == 'ENTRY':
+            return 'IN'
+        if self.direction == 'EXIT':
+            return 'OUT'
+        today = datetime.now().strftime('%Y-%m-%d')
+        conn  = get_db()
+        last  = conn.execute(
+            "SELECT punch_type FROM unknown_faces WHERE cluster_id=? AND DATE(detected_at)=? ORDER BY id DESC LIMIT 1",
+            (cluster_id, today)
+        ).fetchone()
+        conn.close()
+        if last is None or last['punch_type'] != 'IN':
+            return 'IN'
+        return 'OUT'
+
+    def _log_unknown(self, snap_path: str, enc: np.ndarray):
+        cluster_id = self._assign_unknown_cluster(enc)
+        punch_type = self._determine_unknown_punch(cluster_id)
         conn = get_db()
         conn.execute(
-            'INSERT INTO unknown_faces (camera_id, snapshot_path) VALUES (?,?)',
-            (self.camera_id, snap_path)
+            'INSERT INTO unknown_faces (camera_id, snapshot_path, face_encoding, cluster_id, punch_type) VALUES (?,?,?,?,?)',
+            (self.camera_id, snap_path, encoding_to_blob(enc), cluster_id, punch_type)
         )
         conn.commit()
         conn.close()

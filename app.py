@@ -15,6 +15,7 @@ Cloud:            Web portal only — no cameras, no face engine.
 """
 
 import os, io, csv, json, logging, hashlib, secrets
+import numpy as np
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -645,6 +646,7 @@ def list_unknown():
 
     sql  = '''
         SELECT uf.id, uf.snapshot_path, uf.detected_at, uf.reviewed, uf.notes,
+               uf.cluster_id, uf.punch_type,
                c.name AS camera_name, c.location
         FROM unknown_faces uf
         LEFT JOIN cameras c ON c.id = uf.camera_id
@@ -663,6 +665,63 @@ def list_unknown():
     return ok({'records': [dict(r) for r in rows], 'total': total})
 
 
+@app.route('/api/unknown-faces/persons', methods=['GET'])
+def list_unknown_persons():
+    """Group unknown-face captures by visitor (face-similarity cluster) and
+    show how many times each unidentified person has been seen, with their
+    IN/OUT counts — like a mini attendance log for unrecognised visitors."""
+    page     = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 24))
+
+    sql = '''
+        SELECT uf.cluster_id, uf.snapshot_path, uf.detected_at AS last_seen,
+               c.name AS camera_name, c.location,
+               g.visit_count, g.in_count, g.out_count, g.first_seen, g.unreviewed_count
+        FROM unknown_faces uf
+        JOIN (
+            SELECT cluster_id,
+                   COUNT(*)                                          AS visit_count,
+                   SUM(CASE WHEN punch_type='IN'  THEN 1 ELSE 0 END)  AS in_count,
+                   SUM(CASE WHEN punch_type='OUT' THEN 1 ELSE 0 END)  AS out_count,
+                   MIN(detected_at)                                   AS first_seen,
+                   MAX(id)                                            AS latest_id,
+                   SUM(CASE WHEN reviewed=0 THEN 1 ELSE 0 END)        AS unreviewed_count
+            FROM unknown_faces
+            WHERE cluster_id IS NOT NULL
+            GROUP BY cluster_id
+        ) g ON g.latest_id = uf.id
+        LEFT JOIN cameras c ON c.id = uf.camera_id
+        ORDER BY uf.detected_at DESC
+    '''
+    conn  = get_db()
+    total = conn.execute(
+        'SELECT COUNT(DISTINCT cluster_id) FROM unknown_faces WHERE cluster_id IS NOT NULL'
+    ).fetchone()[0]
+    sql  += f' LIMIT {per_page} OFFSET {(page-1)*per_page}'
+    rows  = conn.execute(sql).fetchall()
+    conn.close()
+    return ok({'records': [dict(r) for r in rows], 'total': total})
+
+
+@app.route('/api/unknown-faces/persons/<cluster_id>', methods=['GET'])
+def unknown_person_visits(cluster_id):
+    """Full visit timeline for one unidentified-visitor cluster."""
+    sql = '''
+        SELECT uf.id, uf.snapshot_path, uf.detected_at, uf.punch_type, uf.reviewed,
+               c.name AS camera_name, c.location
+        FROM unknown_faces uf
+        LEFT JOIN cameras c ON c.id = uf.camera_id
+        WHERE uf.cluster_id = ?
+        ORDER BY uf.detected_at DESC
+    '''
+    conn = get_db()
+    rows = conn.execute(sql, (cluster_id,)).fetchall()
+    conn.close()
+    if not rows:
+        return err('Visitor not found', 404)
+    return ok({'records': [dict(r) for r in rows]})
+
+
 @app.route('/api/unknown-faces/<int:fid>/review', methods=['PUT'])
 def review_unknown(fid):
     data  = request.get_json() or {}
@@ -672,6 +731,65 @@ def review_unknown(fid):
     conn.commit()
     conn.close()
     return ok(msg='Marked as reviewed')
+
+
+@app.route('/api/unknown-faces/<int:fid>/assign', methods=['POST'])
+def assign_unknown(fid):
+    """Link an unknown-face snapshot to an employee and blend it into that
+    employee's stored face encoding, so future captures of this person are
+    recognised instead of logged as Unknown."""
+    data    = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return err('user_id is required')
+
+    conn = get_db()
+    uf   = conn.execute('SELECT snapshot_path, cluster_id FROM unknown_faces WHERE id=?', (fid,)).fetchone()
+    if not uf:
+        conn.close()
+        return err('Unknown face record not found', 404)
+
+    user = conn.execute('SELECT id, name, face_encoding FROM users WHERE id=?', (user_id,)).fetchone()
+    if not user:
+        conn.close()
+        return err('Employee not found', 404)
+
+    path = os.path.join(BASE_DIR, uf['snapshot_path']) if uf['snapshot_path'] else None
+    if not path or not os.path.exists(path):
+        conn.close()
+        return err('Snapshot image is missing')
+
+    new_enc = encode_face_from_image(path)
+    if new_enc is None:
+        conn.close()
+        return err('No face detected in this snapshot')
+
+    if user['face_encoding']:
+        old_enc = blob_to_encoding(user['face_encoding']).astype(np.float32)
+        merged  = old_enc + new_enc
+    else:
+        merged = new_enc
+    merged = merged / np.linalg.norm(merged)
+
+    conn.execute(
+        'UPDATE users SET face_encoding=?, enrolled_at=datetime("now","localtime") WHERE id=?',
+        (encoding_to_blob(merged.astype(np.float32)), user_id)
+    )
+    if uf['cluster_id']:
+        # Same visitor was captured multiple times — clear the whole queue for them
+        conn.execute(
+            'UPDATE unknown_faces SET reviewed=1, notes=? WHERE cluster_id=?',
+            (f"Assigned to {user['name']}", uf['cluster_id'])
+        )
+    else:
+        conn.execute(
+            'UPDATE unknown_faces SET reviewed=1, notes=? WHERE id=?',
+            (f"Assigned to {user['name']}", fid)
+        )
+    conn.commit()
+    conn.close()
+    face_cache.reload()
+    return ok(msg=f"Face assigned to {user['name']} — recognition updated")
 
 
 @app.route('/api/unknown-faces/<int:fid>', methods=['DELETE'])
@@ -814,6 +932,9 @@ def dashboard():
     unknown_cnt = conn.execute(
         "SELECT COUNT(*) FROM unknown_faces WHERE DATE(detected_at)=?", (today,)
     ).fetchone()[0]
+    unknown_unreviewed = conn.execute(
+        "SELECT COUNT(*) FROM unknown_faces WHERE reviewed=0"
+    ).fetchone()[0]
     late_time   = get_setting('work_start', '09:00')
     late_thresh = int(get_setting('late_threshold', 15))
     late_dt     = (datetime.strptime(f"{today} {late_time}", '%Y-%m-%d %H:%M')
@@ -898,6 +1019,7 @@ def dashboard():
         'absent_today':    absent,
         'late_today':      late_count,
         'unknown_today':   unknown_cnt,
+        'unknown_unreviewed_total': unknown_unreviewed,
         'dept_stats':      [dict(r) for r in dept_stats],
         'recent_activity': [dict(r) for r in recent],
         'weekly_trend':    trend,
@@ -1829,15 +1951,15 @@ if __name__ == '__main__':
 
     try:
         from waitress import serve
-        log.info(f"[FaceAttend] Using Waitress WSGI server — production ready for 500+ users.")
         if ssl_ctx:
-            # Waitress does not support SSL natively; wrap with ssl module
-            import ssl as _ssl
-            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
-            ctx.load_cert_chain(ssl_ctx[0], ssl_ctx[1])
-            serve(app, host=host, port=port, _quiet=True,
-                  ssl_context=ctx, threads=16)
+            # Waitress has no native SSL support. For HTTPS, fall back to the
+            # Flask dev server here; for production HTTPS, launch via run.sh
+            # (gunicorn terminates SSL via --certfile/--keyfile).
+            log.warning("[FaceAttend] Waitress has no SSL support — using Flask dev server for HTTPS. "
+                        "For production, launch via run.sh (gunicorn).")
+            app.run(host=host, port=port, debug=False, threaded=True, ssl_context=ssl_ctx)
         else:
+            log.info(f"[FaceAttend] Using Waitress WSGI server — production ready for 500+ users.")
             serve(app, host=host, port=port, _quiet=True, threads=16)
     except ImportError:
         # Last resort: Flask dev server (fine for testing, not for production)

@@ -78,6 +78,25 @@ def get_user(uid: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_user_with_encoding(uid: int) -> Optional[dict]:
+    """Fetch a user's id, name and raw face_encoding blob (or None)."""
+    with get_db() as conn:
+        row = conn.execute(
+            f'SELECT id, name, face_encoding FROM users WHERE id={PH}', (uid,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_user_face_encoding(uid: int, blob: bytes) -> None:
+    """Replace a user's face encoding (e.g. after blending in a new sample)."""
+    with get_db() as conn:
+        conn.execute(
+            f'UPDATE users SET face_encoding={PH}, '
+            f'enrolled_at=datetime("now","localtime") WHERE id={PH}',
+            (blob, uid),
+        )
+
+
 def get_user_photo_path(uid: int) -> Optional[str]:
     """Return the photo_path for a user or None."""
     with get_db() as conn:

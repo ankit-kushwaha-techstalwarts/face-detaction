@@ -247,6 +247,10 @@ tr:hover td{background:var(--gray-50)}
 .divider{border:none;border-top:1px solid var(--gray-200);margin:16px 0}
 .loader{display:inline-block;width:18px;height:18px;border:2px solid var(--gray-200);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.nav-badge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:var(--red);color:#fff;font-size:11px;font-weight:700;line-height:1.6}
+.assign-emp-row{padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--gray-100)}
+.assign-emp-row:last-child{border-bottom:none}
+.assign-emp-row:hover{background:var(--gray-50)}
 /* ─── Toggle switch ────────────────────────────────────────── */
 .toggle-switch{position:relative;display:inline-block;width:52px;height:28px;flex-shrink:0}
 .toggle-switch input{opacity:0;width:0;height:0}
@@ -297,7 +301,7 @@ tr:hover td{background:var(--gray-50)}
     <div class="section-label nav-section-attendance">Attendance</div>
     <a href="#" class="nav-link nav-role-manager" data-page="inout"><span class="icon">🕐</span> In/Out Records</a>
     <a href="#" class="nav-link" data-page="today"><span class="icon">📋</span> Today's Summary</a>
-    <a href="#" class="nav-link nav-role-manager" data-page="unknown"><span class="icon">👤</span> Unknown Faces</a>
+    <a href="#" class="nav-link nav-role-manager" data-page="unknown"><span class="icon">👤</span> Unknown Faces<span id="unk-nav-badge" class="nav-badge" style="display:none"></span></a>
     <div class="section-label nav-role-manager">Management</div>
     <a href="#" class="nav-link nav-role-manager" data-page="users"><span class="icon">👥</span> User Enrollment</a>
     <a href="#" class="nav-link nav-role-manager" data-page="reports"><span class="icon">📊</span> Reports</a>
@@ -470,7 +474,14 @@ tr:hover td{background:var(--gray-50)}
         <span class="toggle-slider"></span>
       </label>
     </div>
-    <div class="card">
+
+    <!-- View toggle -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-primary btn-sm" id="unk-tab-all" onclick="switchUnkView('all')">🖼 All Captures</button>
+      <button class="btn btn-outline btn-sm" id="unk-tab-persons" onclick="switchUnkView('persons')">🧑‍🤝‍🧑 Unknown Visitors</button>
+    </div>
+
+    <div class="card" id="unk-view-all">
       <!-- Filter bar -->
       <div class="filter-bar">
         <select id="unk-filter"><option value="">All</option><option value="0">Unreviewed</option><option value="1">Reviewed</option></select>
@@ -491,6 +502,17 @@ tr:hover td{background:var(--gray-50)}
       </div>
       <div class="unk-grid" id="unk-grid"></div>
       <div class="pagination" id="unk-pagination"></div>
+    </div>
+
+    <!-- Unknown Visitors (grouped by face, with visit/IN-OUT counts) -->
+    <div class="card" id="unk-view-persons" style="display:none">
+      <div class="filter-bar">
+        <button class="btn btn-primary btn-sm" onclick="loadUnknownPersons()">🔄 Refresh</button>
+        <span id="unk-persons-count" class="text-sm text-gray"></span>
+      </div>
+      <p class="text-xs text-gray mb-3">Repeat captures of the same unrecognised person are grouped together, with how many times they were seen entering/leaving.</p>
+      <div class="unk-grid" id="unk-persons-grid"></div>
+      <div class="pagination" id="unk-persons-pagination"></div>
     </div>
   </div>
 
@@ -1273,6 +1295,30 @@ tr:hover td{background:var(--gray-50)}
   </div>
 </div>
 
+<!-- Assign Unknown Face to Employee Modal -->
+<div class="modal-overlay" id="modal-assign-unk">
+  <div class="modal" style="width:380px">
+    <button class="modal-close" onclick="closeModal('modal-assign-unk')">✕</button>
+    <h2>👤 Assign to Employee</h2>
+    <p class="text-sm text-gray mt-1 mb-3">Link this photo to an employee. It will be blended into their face profile to improve future recognition accuracy.</p>
+    <div class="form-group mb-3">
+      <label>Search Employee</label>
+      <input type="text" id="assign-emp-search" placeholder="Type name or employee ID…" autocomplete="off"/>
+    </div>
+    <div id="assign-emp-results" style="max-height:240px;overflow:auto;border:1px solid var(--gray-200);border-radius:6px"></div>
+  </div>
+</div>
+
+<!-- Unknown Visitor Timeline Modal -->
+<div class="modal-overlay" id="modal-visitor-timeline">
+  <div class="modal" style="width:460px">
+    <button class="modal-close" onclick="closeModal('modal-visitor-timeline')">✕</button>
+    <h2>🧑‍🤝‍🧑 Visitor History</h2>
+    <p id="visitor-timeline-summary" class="text-sm text-gray mt-1 mb-3"></p>
+    <div id="visitor-timeline-list" style="max-height:400px;overflow:auto"></div>
+  </div>
+</div>
+
 <!-- Add/Edit Holiday Modal -->
 <div class="modal-overlay" id="modal-holiday">
   <div class="modal" style="width:420px">
@@ -1341,7 +1387,7 @@ tr:hover td{background:var(--gray-50)}
 //  STATE
 // ══════════════════════════════════════════════════════════
 const state = {
-  attPage: 1, unkPage: 1,
+  attPage: 1, unkPage: 1, unkPersonsPage: 1,
   departments: [],
   settings: {},
   users: []
@@ -1376,14 +1422,21 @@ function toast(msg, type='info') {
 function openModal(id) { $(id).classList.add('open') }
 function closeModal(id) { $(id).classList.remove('open') }
 
+// The server stores naive "YYYY-MM-DD HH:MM:SS" timestamps that are actually
+// UTC (server clock runs in UTC). Treat them as UTC so they can be displayed
+// in IST regardless of the viewer's browser timezone.
+function toUTCDate(s) {
+  if (/Z|[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
 function fmtTime(s) {
   if (!s) return '-';
-  try { return new Date(s).toLocaleString('en-IN',{hour12:true,hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); }
+  try { return toUTCDate(s).toLocaleString('en-IN',{hour12:true,hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short',timeZone:'Asia/Kolkata'}); }
   catch { return s; }
 }
 function fmtDate(s) {
   if (!s) return '-';
-  try { return new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  try { return toUTCDate(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'}); }
   catch { return s; }
 }
 
@@ -1391,7 +1444,8 @@ function fmtDate(s) {
 setInterval(() => {
   $('clock').textContent = new Date().toLocaleString('en-IN',{
     weekday:'short',day:'2-digit',month:'short',
-    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true,
+    timeZone:'Asia/Kolkata'
   });
 }, 1000);
 
@@ -1497,6 +1551,15 @@ async function loadDashboard() {
   $('s-absent').textContent  = d.absent_today;
   $('s-late').textContent    = d.late_today;
   $('s-unknown').textContent = d.unknown_today;
+
+  // Sidebar badge: total unreviewed unknown faces (all time)
+  const unkBadge = $('unk-nav-badge');
+  if (d.unknown_unreviewed_total > 0) {
+    unkBadge.textContent = d.unknown_unreviewed_total;
+    unkBadge.style.display = 'inline-block';
+  } else {
+    unkBadge.style.display = 'none';
+  }
 
   // Weekly chart
   const maxP = Math.max(...d.weekly_trend.map(x=>x.present), 1);
@@ -1891,8 +1954,9 @@ async function loadUnknown(page=1) {
           <div class="info">
             <div>${fmtTime(f.detected_at)}</div>
             <div class="text-gray">${f.location||''}</div>
-            <div style="display:flex;gap:4px;margin-top:6px" onclick="event.stopPropagation()">
+            <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
               ${!f.reviewed?`<button class="btn btn-outline btn-xs" onclick="reviewUnk(${f.id})">✓ Review</button>`:'<span style="color:var(--green);font-size:11px">✓ Reviewed</span>'}
+              <button class="btn btn-outline btn-xs" onclick="assignUnk(${f.id})" title="Assign to an employee to improve recognition">👤 Assign</button>
               <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="delUnk(${f.id})">🗑</button>
             </div>
           </div>
@@ -1900,15 +1964,115 @@ async function loadUnknown(page=1) {
   renderPagination('unk-pagination', page, Math.ceil(r.data.total/24), loadUnknown);
 }
 
+// ── Unknown Visitors (grouped repeat captures, with IN/OUT visit counts) ──
+function switchUnkView(view) {
+  const isAll = view === 'all';
+  $('unk-tab-all').className     = `btn btn-sm ${isAll ? 'btn-primary' : 'btn-outline'}`;
+  $('unk-tab-persons').className = `btn btn-sm ${!isAll ? 'btn-primary' : 'btn-outline'}`;
+  $('unk-view-all').style.display     = isAll ? '' : 'none';
+  $('unk-view-persons').style.display = isAll ? 'none' : '';
+  if (!isAll) loadUnknownPersons(state.unkPersonsPage);
+}
+
+async function loadUnknownPersons(page=1) {
+  state.unkPersonsPage = page;
+  const r = await api(`/api/unknown-faces/persons?page=${page}&per_page=24`);
+  if (r.status !== 'ok') return;
+  $('unk-persons-count').textContent = `${r.data.total} unique visitor(s)`;
+  $('unk-persons-grid').innerHTML = r.data.records.length===0
+    ? '<p class="text-sm text-gray">No unidentified visitors recorded yet.</p>'
+    : r.data.records.map(p => `
+        <div class="unk-card" onclick="viewVisitorTimeline('${p.cluster_id}')" style="cursor:pointer">
+          <img src="${p.snapshot_path?'/'+p.snapshot_path:''}" onerror="this.style.display='none'" alt="Unknown visitor"/>
+          <div class="unk-badge">${p.camera_name||'CAM'}</div>
+          <div class="info">
+            <div style="font-weight:600">Seen ${p.visit_count}×</div>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <span class="tag tag-in">IN ${p.in_count}</span>
+              <span class="tag tag-out">OUT ${p.out_count}</span>
+            </div>
+            <div class="text-gray" style="margin-top:4px">Last seen: ${fmtTime(p.last_seen)}</div>
+            ${p.unreviewed_count>0?`<div style="color:var(--orange);font-size:11px;margin-top:2px">${p.unreviewed_count} unreviewed</div>`:''}
+          </div>
+        </div>`).join('');
+  renderPagination('unk-persons-pagination', page, Math.ceil(r.data.total/24), loadUnknownPersons);
+}
+
+async function viewVisitorTimeline(clusterId) {
+  const r = await api(`/api/unknown-faces/persons/${clusterId}`);
+  if (r.status !== 'ok') { toast(r.message,'error'); return; }
+  const recs = r.data.records;
+  const inCount  = recs.filter(x=>x.punch_type==='IN').length;
+  const outCount = recs.filter(x=>x.punch_type==='OUT').length;
+  $('visitor-timeline-summary').textContent = `Seen ${recs.length} time(s) — IN ${inCount} · OUT ${outCount}`;
+  $('visitor-timeline-list').innerHTML = recs.map(v => `
+    <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray-100)">
+      <img src="${v.snapshot_path?'/'+v.snapshot_path:''}" onerror="this.style.display='none'" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-100)"/>
+      <div style="flex:1">
+        <div class="text-sm">${fmtTime(v.detected_at)}</div>
+        <div class="text-xs text-gray">${v.camera_name||''}${v.location?' · '+v.location:''}</div>
+      </div>
+      <span class="tag ${v.punch_type==='OUT'?'tag-out':'tag-in'}">${v.punch_type||'-'}</span>
+    </div>`).join('');
+  openModal('modal-visitor-timeline');
+}
+
 async function reviewUnk(id) {
   await api(`/api/unknown-faces/${id}/review`,{method:'PUT',body:JSON.stringify({notes:'Reviewed'})});
   toast('Marked as reviewed','success');
   loadUnknown(state.unkPage);
+  loadDashboard();
 }
 async function delUnk(id) {
   if(!confirm('Delete this record?')) return;
   await api(`/api/unknown-faces/${id}`,{method:'DELETE'});
   loadUnknown(state.unkPage);
+  loadDashboard();
+}
+
+// ── Assign unknown face to an employee (improves recognition accuracy) ──
+let _assignUnkId = null;
+function assignUnk(id) {
+  _assignUnkId = id;
+  $('assign-emp-search').value = '';
+  $('assign-emp-results').innerHTML = '<p class="text-xs text-gray" style="padding:8px">Type a name or employee ID to search…</p>';
+  openModal('modal-assign-unk');
+  setTimeout(() => $('assign-emp-search').focus(), 50);
+}
+
+let _assignSearchTimer = null;
+$('assign-emp-search').addEventListener('input', () => {
+  clearTimeout(_assignSearchTimer);
+  const q = $('assign-emp-search').value.trim();
+  if (!q) {
+    $('assign-emp-results').innerHTML = '<p class="text-xs text-gray" style="padding:8px">Type a name or employee ID to search…</p>';
+    return;
+  }
+  _assignSearchTimer = setTimeout(async () => {
+    const r = await api(`/api/users?q=${encodeURIComponent(q)}&per_page=20&active=1`);
+    if (r.status !== 'ok') return;
+    const users = r.data.users || r.data;
+    $('assign-emp-results').innerHTML = users.length === 0
+      ? '<p class="text-xs text-gray" style="padding:8px">No employees found</p>'
+      : users.map(u => `
+          <div class="assign-emp-row" onclick="confirmAssignUnk(${u.id},'${u.name.replace(/'/g,"\\'")}')">
+            <div style="font-weight:600;font-size:13px">${u.name}</div>
+            <div class="text-xs text-gray">${u.emp_id}${u.department?' · '+u.department:''}</div>
+          </div>`).join('');
+  }, 250);
+});
+
+async function confirmAssignUnk(userId, name) {
+  if (!confirm(`Assign this photo to ${name} and improve their recognition profile?`)) return;
+  const r = await api(`/api/unknown-faces/${_assignUnkId}/assign`, {method:'POST', body:JSON.stringify({user_id:userId})});
+  if (r.status === 'ok') {
+    toast(r.message, 'success');
+    closeModal('modal-assign-unk');
+    loadUnknown(state.unkPage);
+    loadDashboard();
+  } else {
+    toast(r.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2745,6 +2909,7 @@ async function bulkDeleteUnknown() {
     unkSelected.clear();
     updateSelCount();
     loadUnknown(state.unkPage);
+    loadDashboard();
   } else toast(r.message, 'error');
 }
 
@@ -2757,6 +2922,7 @@ async function markAllReviewed() {
   unkSelected.clear();
   updateSelCount();
   loadUnknown(state.unkPage);
+  loadDashboard();
 }
 
 // ══════════════════════════════════════════════════════════

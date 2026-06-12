@@ -229,6 +229,10 @@ def init_db():
         # v2: cloud sync columns
         "ALTER TABLE attendance    ADD COLUMN synced INTEGER DEFAULT 0",
         "ALTER TABLE unknown_faces ADD COLUMN synced INTEGER DEFAULT 0",
+        # v3: repeat-visitor tracking for unidentified faces
+        "ALTER TABLE unknown_faces ADD COLUMN face_encoding BLOB",
+        "ALTER TABLE unknown_faces ADD COLUMN cluster_id TEXT",
+        "ALTER TABLE unknown_faces ADD COLUMN punch_type TEXT",
     ]
     for sql in migrations:
         try:
@@ -268,6 +272,9 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_unk_synced
             ON unknown_faces(synced, id);
+
+        CREATE INDEX IF NOT EXISTS idx_unk_cluster
+            ON unknown_faces(cluster_id, detected_at);
     ''')
 
     conn.commit()
