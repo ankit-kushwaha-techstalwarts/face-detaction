@@ -162,6 +162,14 @@ tr:hover td{background:var(--gray-50)}
 }
 .enroll-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 .enroll-panel{display:none}.enroll-panel.active{display:block}
+.photo-upload.drag{border-color:var(--blue);background:var(--blue-light)}
+.enroll-thumb{position:relative;width:72px;height:72px}
+.enroll-thumb img{width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)}
+.enroll-thumb .rm{
+  position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;
+  border:none;background:var(--red);color:#fff;font-size:11px;line-height:20px;
+  cursor:pointer;padding:0;box-shadow:0 1px 3px rgba(0,0,0,.3)
+}
 .webcam-wrap{
   position:relative;background:#111;border-radius:var(--radius);overflow:hidden;
   aspect-ratio:4/3;width:100%;
@@ -1176,15 +1184,16 @@ tr:hover td{background:var(--gray-50)}
 
 <!-- Enroll Face Modal -->
 <div class="modal-overlay" id="modal-enroll">
-  <div class="modal" style="width:460px">
+  <div class="modal" style="width:520px">
     <button class="modal-close" onclick="closeEnrollModal()">✕</button>
     <h2>🤖 Enroll Face</h2>
     <input type="hidden" id="enroll-uid"/>
+    <div id="enroll-current" class="text-xs mt-1 mb-2"></div>
 
     <!-- Tabs -->
     <div class="enroll-tabs">
       <button class="enroll-tab active" id="tab-webcam" onclick="switchEnrollTab('webcam')">📷 Use Camera</button>
-      <button class="enroll-tab"        id="tab-upload" onclick="switchEnrollTab('upload')">⬆ Upload Photo</button>
+      <button class="enroll-tab"        id="tab-upload" onclick="switchEnrollTab('upload')">⬆ Upload Photos</button>
     </div>
 
     <!-- ── Webcam Panel ── -->
@@ -1206,7 +1215,8 @@ tr:hover td{background:var(--gray-50)}
           <button class="btn btn-primary"        id="btn-capture" onclick="captureFrame()" disabled>📸 Capture</button>
         </div>
         <p class="text-xs text-gray mt-2" style="text-align:center">
-          Position your face inside the oval, look directly at camera, then click Capture.
+          Capture several shots: frontal, slight left/right turns, and one with chin
+          slightly down (matches the high ceiling-camera angle). Each capture is added below.
         </p>
       </div>
       <!-- Captured preview -->
@@ -1214,25 +1224,51 @@ tr:hover td{background:var(--gray-50)}
         <canvas id="enroll-canvas" class="cam-captured-preview"></canvas>
         <div class="webcam-controls mt-2">
           <button class="btn btn-outline" onclick="retakePhoto()">🔁 Retake</button>
-          <button class="btn btn-success" onclick="submitCapturedFrame()">✅ Enroll This Photo</button>
+          <button class="btn btn-success" onclick="addCapturedToQueue()">➕ Add Photo &amp; Continue</button>
         </div>
       </div>
       <!-- No camera fallback -->
       <div id="webcam-error" style="display:none;text-align:center;padding:28px 0">
         <div style="font-size:40px">🚫</div>
         <p class="text-sm mt-2" style="color:var(--red)" id="webcam-error-msg">Camera not accessible.</p>
-        <p class="text-xs text-gray mt-1">Switch to <strong>Upload Photo</strong> tab instead.</p>
+        <p class="text-xs text-gray mt-1">Switch to <strong>Upload Photos</strong> tab instead.</p>
       </div>
     </div>
 
     <!-- ── Upload Panel ── -->
     <div class="enroll-panel" id="panel-upload">
-      <div class="photo-upload mb-3" onclick="document.getElementById('enroll-photo').click()">
+      <div class="photo-upload mb-3" id="enroll-drop"
+           onclick="document.getElementById('enroll-photo').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="event.preventDefault();this.classList.remove('drag');addEnrollFiles(event.dataTransfer.files)">
         <div style="font-size:36px">📂</div>
-        <p class="text-sm mt-2">Click to select enrollment photo(s)</p>
-        <p class="text-xs text-gray">JPG, PNG, WEBP — select 3–5 photos for best accuracy:<br/>one clear frontal + slight left/right angles, good lighting</p>
+        <p class="text-sm mt-2">Click or drag &amp; drop to add photos</p>
+        <p class="text-xs text-gray">JPG, PNG, WEBP — 3–5 photos recommended:<br/>
+          one clear frontal + slight left/right angles + one from slightly above<br/>
+          (similar to your CCTV camera view), good lighting, no mask/cap</p>
       </div>
-      <input type="file" id="enroll-photo" accept="image/*" multiple style="display:none" onchange="doEnrollFromFile(this)"/>
+      <input type="file" id="enroll-photo" accept="image/*" multiple style="display:none"
+             onchange="addEnrollFiles(this.files);this.value=''"/>
+    </div>
+
+    <!-- ── Photo queue (shared by both tabs) ── -->
+    <div id="enroll-queue-wrap" class="mt-3" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="text-sm" style="font-weight:600">Photos to enroll (<span id="enroll-count">0</span>)</span>
+        <button class="btn btn-outline btn-xs" onclick="clearEnrollQueue()">Clear all</button>
+      </div>
+      <div id="enroll-thumbs" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px"></div>
+      <div id="enroll-mode-wrap" class="mt-3" style="display:none">
+        <label class="text-sm" style="cursor:pointer">
+          <input type="radio" name="enroll-mode" value="append" checked/> ➕ Add to existing photos
+        </label>
+        <label class="text-sm" style="cursor:pointer;margin-left:16px">
+          <input type="radio" name="enroll-mode" value="replace"/> ♻ Replace all photos
+        </label>
+      </div>
+      <button class="btn btn-success mt-3" id="btn-enroll-submit"
+              style="width:100%" onclick="submitEnrollQueue()">✅ Enroll Photos</button>
     </div>
 
     <div id="enroll-status" class="mt-3"></div>
@@ -2218,6 +2254,8 @@ function openEnroll(uid) {
   $('enroll-status').innerHTML = '';
   $('enroll-photo').value = '';
   webcam.captured = null;
+  clearEnrollQueue();
+  loadEnrollStatus(uid);
   // Reset to live view
   $('webcam-live-wrap').style.display    = '';
   $('webcam-captured-wrap').style.display = 'none';
@@ -2227,8 +2265,111 @@ function openEnroll(uid) {
   startWebcam();
 }
 
+// Current enrollment summary shown at the top of the modal
+let enrollHasFace = false;
+async function loadEnrollStatus(uid) {
+  const box = $('enroll-current');
+  box.innerHTML = '';
+  enrollHasFace = false;
+  $('enroll-mode-wrap').style.display = 'none';
+  try {
+    const [u, t] = await Promise.all([
+      fetch(`/api/users/${uid}`).then(x=>x.json()),
+      fetch(`/api/users/${uid}/templates`).then(x=>x.json()),
+    ]);
+    if (u.status === 'ok' && u.data && u.data.enrolled_at) {
+      enrollHasFace = true;
+      const s = (t.status==='ok' && t.data && t.data.templates) || {};
+      const extra = (s.enroll||0) + (s.merge||0) + (s.auto||0);
+      box.innerHTML = `<span style="color:var(--green);font-weight:600">✅ Enrolled</span>
+        <span class="text-gray">— 1 anchor photo + ${extra} extra template(s)${s.auto?` (${s.auto} auto-learned)`:''}.
+        You can add more angle photos below.</span>`;
+      $('enroll-mode-wrap').style.display = '';
+    } else {
+      box.innerHTML = `<span style="color:var(--orange);font-weight:600">Not enrolled yet</span>
+        <span class="text-gray">— add 3–5 photos for best recognition.</span>`;
+    }
+  } catch(e) { /* status line is informational only */ }
+}
+
+// ── Photo queue (shared by webcam captures and file uploads) ──
+const enrollQueue = [];
+
+function addEnrollFiles(files) {
+  for (const f of files) {
+    if (!f.type || !f.type.startsWith('image/')) continue;
+    enrollQueue.push({ file: f, url: URL.createObjectURL(f) });
+  }
+  renderEnrollQueue();
+}
+
+function addCapturedToQueue() {
+  if (!webcam.captured) { toast('No photo captured', 'error'); return; }
+  const f = new File([webcam.captured], `webcam_${enrollQueue.length+1}.jpg`, {type:'image/jpeg'});
+  enrollQueue.push({ file: f, url: URL.createObjectURL(f) });
+  webcam.captured = null;
+  renderEnrollQueue();
+  retakePhoto();   // back to live view for the next angle
+}
+
+function removeEnrollPhoto(i) {
+  URL.revokeObjectURL(enrollQueue[i].url);
+  enrollQueue.splice(i, 1);
+  renderEnrollQueue();
+}
+
+function clearEnrollQueue() {
+  enrollQueue.forEach(p => URL.revokeObjectURL(p.url));
+  enrollQueue.length = 0;
+  renderEnrollQueue();
+}
+
+function renderEnrollQueue() {
+  const wrap = $('enroll-queue-wrap');
+  if (!wrap) return;
+  wrap.style.display = enrollQueue.length ? '' : 'none';
+  $('enroll-count').textContent = enrollQueue.length;
+  $('enroll-thumbs').innerHTML = enrollQueue.map((p, i) => `
+    <div class="enroll-thumb">
+      <img src="${p.url}" alt="photo ${i+1}"/>
+      <button type="button" class="rm" title="Remove" onclick="removeEnrollPhoto(${i})">✕</button>
+    </div>`).join('');
+  $('btn-enroll-submit').textContent = `✅ Enroll ${enrollQueue.length} Photo${enrollQueue.length>1?'s':''}`;
+}
+
+async function submitEnrollQueue() {
+  const uid = $('enroll-uid').value;
+  if (!enrollQueue.length) return;
+  const mode = enrollHasFace
+    ? (document.querySelector('input[name="enroll-mode"]:checked')?.value || 'append')
+    : 'replace';
+  const st  = $('enroll-status');
+  const btn = $('btn-enroll-submit');
+  btn.disabled = true;
+  st.innerHTML = `<div class="flex items-center gap-2"><span class="loader"></span> Processing ${enrollQueue.length} photo(s)…</div>`;
+  const fd = new FormData();
+  for (const p of enrollQueue) fd.append('photo', p.file, p.file.name);
+  fd.append('mode', mode);
+  try {
+    const r = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
+    if (r.status === 'ok') {
+      st.innerHTML = `<p style="color:var(--green);font-weight:600">✅ ${r.message || 'Face enrolled successfully!'}</p>`;
+      toast('Face photos enrolled!', 'success');
+      clearEnrollQueue();
+      loadEnrollStatus(uid);
+      loadUsers();
+    } else {
+      st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
+    }
+  } catch(e) {
+    st.innerHTML = `<p style="color:var(--red)">❌ Upload failed — check connection and try again.</p>`;
+  }
+  btn.disabled = false;
+}
+
 function closeEnrollModal() {
   stopWebcam();
+  clearEnrollQueue();
   closeModal('modal-enroll');
 }
 
@@ -2328,43 +2469,6 @@ function retakePhoto() {
   $('webcam-captured-wrap').style.display = 'none';
   $('webcam-live-wrap').style.display     = '';
   startWebcam();
-}
-
-async function submitCapturedFrame() {
-  if (!webcam.captured) { toast('No photo captured', 'error'); return; }
-  const uid = $('enroll-uid').value;
-  const st  = $('enroll-status');
-  st.innerHTML = '<div class="flex items-center gap-2"><span class="loader"></span> Processing face…</div>';
-  const fd = new FormData();
-  fd.append('photo', webcam.captured, 'webcam_capture.jpg');
-  const r = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
-  if (r.status === 'ok') {
-    st.innerHTML = '<p style="color:var(--green);font-weight:600">✅ Face enrolled successfully!</p>';
-    toast('Face enrolled!', 'success');
-    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1300);
-  } else {
-    st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
-    // Let them retake
-    setTimeout(() => retakePhoto(), 2000);
-  }
-}
-
-// File-upload path (Upload tab)
-async function doEnrollFromFile(input) {
-  const uid = $('enroll-uid').value;
-  if (!input.files.length) return;
-  const st  = $('enroll-status');
-  st.innerHTML = `<div class="flex items-center gap-2"><span class="loader"></span> Processing ${input.files.length} photo(s)…</div>`;
-  const fd = new FormData();
-  for (const file of input.files) fd.append('photo', file);
-  const r  = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
-  if (r.status === 'ok') {
-    st.innerHTML = `<p style="color:var(--green);font-weight:600">✅ ${r.message || 'Face enrolled successfully!'}</p>`;
-    toast('Face enrolled!', 'success');
-    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1800);
-  } else {
-    st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
-  }
 }
 
 // ── Profile photo quick-snap (in Add Employee modal) ────────

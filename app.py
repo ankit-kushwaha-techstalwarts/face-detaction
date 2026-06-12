@@ -64,7 +64,7 @@ LOGO_DIR   = os.path.join(BASE_DIR, 'uploads', 'logo')
 os.makedirs(LOGO_DIR, exist_ok=True)
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # 64MB — multi-photo enrollment uploads
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 logging.basicConfig(level=logging.INFO)
@@ -480,12 +480,20 @@ def enroll_face(uid):
     Enroll face from uploaded image(s) or existing photo_path.
 
     Accepts multiple 'photo' files (frontal + slight angles recommended).
-    The first accepted photo becomes the anchor encoding (users.face_encoding,
-    synced to the cloud portal); every additional accepted photo is stored as
-    an extra template, so live matching covers more poses. Re-enrolling wipes
-    the previous gallery (including auto-learned templates) — a fresh trusted
-    baseline.
+
+    mode=replace (default): the first accepted photo becomes the anchor
+    encoding (users.face_encoding, synced to the cloud portal); every
+    additional accepted photo is stored as an extra template. Wipes the
+    previous gallery (including auto-learned templates) — a fresh baseline.
+
+    mode=append: keeps the existing anchor and gallery; every accepted photo
+    is added as an extra template, so live matching covers more poses (e.g.
+    high-angle CCTV shots). Falls back to replace if the user has no anchor.
     """
+    mode = (request.form.get('mode') or 'replace').lower()
+    if mode not in ('replace', 'append'):
+        return err("mode must be 'replace' or 'append'")
+
     paths = []
     if 'photo' in request.files:
         ts = int(datetime.now().timestamp())
@@ -514,24 +522,37 @@ def enroll_face(uid):
         return err(rejected[0] if len(rejected) == 1
                    else 'All photos rejected — ' + ' | '.join(rejected))
 
-    anchor_path, anchor_enc = accepted[0]
-    rel  = os.path.relpath(anchor_path, BASE_DIR)
     conn = get_db()
-    conn.execute(
-        'UPDATE users SET face_encoding=?, photo_path=?, enrolled_at=datetime("now","localtime") WHERE id=?',
-        (encoding_to_blob(anchor_enc), rel, uid)
-    )
-    conn.execute('DELETE FROM face_templates WHERE user_id=?', (uid,))
-    for _, extra_enc in accepted[1:]:
+    if mode == 'append':
+        row = conn.execute('SELECT face_encoding FROM users WHERE id=?', (uid,)).fetchone()
+        if not (row and row['face_encoding']):
+            mode = 'replace'   # nothing to append to — establish a baseline
+
+    if mode == 'append':
+        for _, extra_enc in accepted:
+            conn.execute(
+                'INSERT INTO face_templates (user_id, embedding, source) VALUES (?,?,?)',
+                (uid, encoding_to_blob(extra_enc), 'enroll')
+            )
+        msg = f'Added {len(accepted)} photo(s) to face profile'
+    else:
+        anchor_path, anchor_enc = accepted[0]
+        rel = os.path.relpath(anchor_path, BASE_DIR)
         conn.execute(
-            'INSERT INTO face_templates (user_id, embedding, source) VALUES (?,?,?)',
-            (uid, encoding_to_blob(extra_enc), 'enroll')
+            'UPDATE users SET face_encoding=?, photo_path=?, enrolled_at=datetime("now","localtime") WHERE id=?',
+            (encoding_to_blob(anchor_enc), rel, uid)
         )
+        conn.execute('DELETE FROM face_templates WHERE user_id=?', (uid,))
+        for _, extra_enc in accepted[1:]:
+            conn.execute(
+                'INSERT INTO face_templates (user_id, embedding, source) VALUES (?,?,?)',
+                (uid, encoding_to_blob(extra_enc), 'enroll')
+            )
+        msg = f'Face enrolled with {len(accepted)} photo(s)'
     conn.commit()
     conn.close()
     face_cache.reload()
 
-    msg = f'Face enrolled with {len(accepted)} photo(s)'
     if rejected:
         msg += f" — {len(rejected)} rejected: " + ' | '.join(rejected)
     return ok(msg=msg)

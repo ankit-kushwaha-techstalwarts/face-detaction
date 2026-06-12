@@ -26,8 +26,8 @@ class Config:
     SESSION_COOKIE_SAMESITE: str  = 'Lax' # CSRF protection
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
 
-    # Upload size guard — 16 MB
-    MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
+    # Upload size guard — 64 MB (multi-photo enrollment uploads)
+    MAX_CONTENT_LENGTH: int = 64 * 1024 * 1024
 
     # ── Database ───────────────────────────────────────────────────────────
     # If both DATABASE_URL and CLOUD_MODE are set, the app uses PostgreSQL

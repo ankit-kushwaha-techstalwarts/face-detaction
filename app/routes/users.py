@@ -128,8 +128,14 @@ def enroll_face(uid):
     face_dir = current_app.FACE_DIR
     base_dir = current_app.config['BASE_DIR']
 
-    # Multi-photo enrolment: first accepted photo becomes the anchor encoding
-    # (synced to cloud), the rest are stored as extra pose templates.
+    # Multi-photo enrolment. mode=replace (default): first accepted photo
+    # becomes the anchor encoding (synced to cloud), the rest become extra
+    # pose templates, and the previous gallery is wiped. mode=append: anchor
+    # and gallery are kept; every accepted photo becomes an extra template.
+    mode = (request.form.get('mode') or 'replace').lower()
+    if mode not in ('replace', 'append'):
+        return err("mode must be 'replace' or 'append'")
+
     paths = []
     if 'photo' in request.files:
         ts = int(datetime.now().timestamp())
@@ -156,16 +162,26 @@ def enroll_face(uid):
         return err(rejected[0] if len(rejected) == 1
                    else 'All photos rejected — ' + ' | '.join(rejected))
 
-    anchor_path, anchor_enc = accepted[0]
-    rel  = os.path.relpath(anchor_path, base_dir)
-    user_dao.update_user_encoding(uid, current_app.encoding_to_blob(anchor_enc), rel)
-    # Re-enrolment resets the gallery (including auto-learned templates)
-    current_app.clear_face_templates(uid)
-    for _, extra_enc in accepted[1:]:
-        current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
+    if mode == 'append':
+        row = user_dao.get_user_with_encoding(uid)
+        if not (row and row.get('face_encoding')):
+            mode = 'replace'   # nothing to append to — establish a baseline
+
+    if mode == 'append':
+        for _, extra_enc in accepted:
+            current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
+        msg = f'Added {len(accepted)} photo(s) to face profile'
+    else:
+        anchor_path, anchor_enc = accepted[0]
+        rel = os.path.relpath(anchor_path, base_dir)
+        user_dao.update_user_encoding(uid, current_app.encoding_to_blob(anchor_enc), rel)
+        # Re-enrolment resets the gallery (including auto-learned templates)
+        current_app.clear_face_templates(uid)
+        for _, extra_enc in accepted[1:]:
+            current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
+        msg = f'Face enrolled with {len(accepted)} photo(s)'
     current_app.face_cache.reload()
-    audit('ENROLL_FACE', str(uid), f"{len(accepted)} photo(s)")
-    msg = f'Face enrolled with {len(accepted)} photo(s)'
+    audit('ENROLL_FACE', str(uid), f"mode={mode} {len(accepted)} photo(s)")
     if rejected:
         msg += f" — {len(rejected)} rejected: " + ' | '.join(rejected)
     return ok(msg=msg)
