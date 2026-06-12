@@ -129,8 +129,12 @@ def _attach_face_engine(app: Flask) -> None:
         app.camera_manager  = _FakeCameraManager()
         app.gen_mjpeg       = _stub_gen_mjpeg
         app.encode_face     = lambda path: None
+        app.encode_face_detailed = lambda path: (None, 'Face engine unavailable in cloud mode')
         app.encoding_to_blob = lambda enc: None
         app.blob_to_encoding = lambda blob: None
+        app.add_face_template    = lambda *a, **k: None
+        app.clear_face_templates = lambda *a, **k: 0
+        app.get_template_stats   = lambda uid: {}
         app.FACE_DIR         = ''
         app.SNAPSHOT_DIR     = ''
         app.UNKNOWN_DIR      = ''
@@ -138,16 +142,22 @@ def _attach_face_engine(app: Flask) -> None:
 
     try:
         from face_engine import (
-            encode_face_from_image, encoding_to_blob, blob_to_encoding,
+            encode_face_from_image, encode_face_detailed,
+            encoding_to_blob, blob_to_encoding,
             face_cache, camera_manager, gen_mjpeg,
+            add_face_template, clear_face_templates, get_template_stats,
             FACE_DIR, SNAPSHOT_DIR, UNKNOWN_DIR,
         )
         app.face_cache       = face_cache
         app.camera_manager   = camera_manager
         app.gen_mjpeg        = gen_mjpeg
         app.encode_face      = encode_face_from_image
+        app.encode_face_detailed = encode_face_detailed
         app.encoding_to_blob = encoding_to_blob
         app.blob_to_encoding = blob_to_encoding
+        app.add_face_template    = add_face_template
+        app.clear_face_templates = clear_face_templates
+        app.get_template_stats   = get_template_stats
         app.FACE_DIR         = FACE_DIR
         app.SNAPSHOT_DIR     = SNAPSHOT_DIR
         app.UNKNOWN_DIR      = UNKNOWN_DIR
@@ -158,6 +168,10 @@ def _attach_face_engine(app: Flask) -> None:
         app.camera_manager   = _FakeCameraManager()
         app.gen_mjpeg        = _stub_gen_mjpeg
         app.encode_face      = lambda path: None
+        app.encode_face_detailed = lambda path: (None, 'Face engine not available')
+        app.add_face_template    = lambda *a, **k: None
+        app.clear_face_templates = lambda *a, **k: 0
+        app.get_template_stats   = lambda uid: {}
         app.encoding_to_blob = lambda enc: None
         app.blob_to_encoding = lambda blob: None
         app.FACE_DIR         = ''

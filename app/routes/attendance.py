@@ -168,18 +168,17 @@ def assign_unknown(fid):
     if not path or not os.path.exists(path):
         return err('Snapshot image is missing')
 
-    new_enc = current_app.encode_face(path)
+    new_enc, reason = current_app.encode_face_detailed(path)
     if new_enc is None:
-        return err('No face detected in this snapshot')
+        return err(reason or 'No face detected in this snapshot')
 
+    # Store as an extra template instead of averaging into the anchor —
+    # averaging embeddings from different poses blurs both into a weaker
+    # in-between vector; a separate template keeps each pose sharp.
     if user['face_encoding']:
-        old_enc = current_app.blob_to_encoding(user['face_encoding']).astype(np.float32)
-        merged  = old_enc + new_enc
+        current_app.add_face_template(user_id, new_enc, source='merge', reload_cache=False)
     else:
-        merged = new_enc
-    merged = merged / np.linalg.norm(merged)
-
-    user_dao.update_user_face_encoding(user_id, current_app.encoding_to_blob(merged.astype(np.float32)))
+        user_dao.update_user_face_encoding(user_id, current_app.encoding_to_blob(new_enc.astype(np.float32)))
     att_dao.mark_unknown_assigned(fid, uf['cluster_id'], f"Assigned to {user['name']}")
     current_app.face_cache.reload()
     audit('ASSIGN_UNKNOWN', str(fid), f"user_id={user_id}")

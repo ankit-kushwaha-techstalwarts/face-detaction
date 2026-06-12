@@ -1229,10 +1229,10 @@ tr:hover td{background:var(--gray-50)}
     <div class="enroll-panel" id="panel-upload">
       <div class="photo-upload mb-3" onclick="document.getElementById('enroll-photo').click()">
         <div style="font-size:36px">📂</div>
-        <p class="text-sm mt-2">Click to select enrollment photo</p>
-        <p class="text-xs text-gray">JPG, PNG, WEBP — clear frontal face, good lighting</p>
+        <p class="text-sm mt-2">Click to select enrollment photo(s)</p>
+        <p class="text-xs text-gray">JPG, PNG, WEBP — select 3–5 photos for best accuracy:<br/>one clear frontal + slight left/right angles, good lighting</p>
       </div>
-      <input type="file" id="enroll-photo" accept="image/*" style="display:none" onchange="doEnrollFromFile(this)"/>
+      <input type="file" id="enroll-photo" accept="image/*" multiple style="display:none" onchange="doEnrollFromFile(this)"/>
     </div>
 
     <div id="enroll-status" class="mt-3"></div>
@@ -2351,16 +2351,17 @@ async function submitCapturedFrame() {
 
 // File-upload path (Upload tab)
 async function doEnrollFromFile(input) {
-  const uid  = $('enroll-uid').value;
-  const file = input.files[0]; if (!file) return;
-  const st   = $('enroll-status');
-  st.innerHTML = '<div class="flex items-center gap-2"><span class="loader"></span> Processing face…</div>';
-  const fd = new FormData(); fd.append('photo', file);
+  const uid = $('enroll-uid').value;
+  if (!input.files.length) return;
+  const st  = $('enroll-status');
+  st.innerHTML = `<div class="flex items-center gap-2"><span class="loader"></span> Processing ${input.files.length} photo(s)…</div>`;
+  const fd = new FormData();
+  for (const file of input.files) fd.append('photo', file);
   const r  = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
   if (r.status === 'ok') {
-    st.innerHTML = '<p style="color:var(--green);font-weight:600">✅ Face enrolled successfully!</p>';
+    st.innerHTML = `<p style="color:var(--green);font-weight:600">✅ ${r.message || 'Face enrolled successfully!'}</p>`;
     toast('Face enrolled!', 'success');
-    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1300);
+    setTimeout(() => { closeEnrollModal(); loadUsers(); }, 1800);
   } else {
     st.innerHTML = `<p style="color:var(--red)">❌ ${r.message}</p>`;
   }

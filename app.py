@@ -36,8 +36,10 @@ else:
 
 # ── Face engine: local only ────────────────────────────────────────────────
 if not CLOUD_MODE:
-    from face_engine import (encode_face_from_image, encoding_to_blob,
+    from face_engine import (encode_face_from_image, encode_face_detailed,
+                             encoding_to_blob,
                              blob_to_encoding, face_cache, camera_manager, gen_mjpeg,
+                             add_face_template, clear_face_templates, get_template_stats,
                              FACE_DIR, SNAPSHOT_DIR, UNKNOWN_DIR)
 else:
     # Stubs so the rest of the file imports cleanly on cloud
@@ -45,6 +47,10 @@ else:
     gen_mjpeg      = None
     FACE_DIR = SNAPSHOT_DIR = UNKNOWN_DIR = ''
     def encode_face_from_image(p): return None
+    def encode_face_detailed(p): return None, 'Face engine unavailable in cloud mode'
+    def add_face_template(*a, **k): return None
+    def clear_face_templates(*a, **k): return 0
+    def get_template_stats(uid): return {}
     def encoding_to_blob(e): return None
     def blob_to_encoding(b): return None
     class _FakeCache:
@@ -470,35 +476,78 @@ def upload_photo(uid):
 
 @app.route('/api/users/<int:uid>/enroll', methods=['POST'])
 def enroll_face(uid):
-    """Enroll face from uploaded image or existing photo_path."""
+    """
+    Enroll face from uploaded image(s) or existing photo_path.
+
+    Accepts multiple 'photo' files (frontal + slight angles recommended).
+    The first accepted photo becomes the anchor encoding (users.face_encoding,
+    synced to the cloud portal); every additional accepted photo is stored as
+    an extra template, so live matching covers more poses. Re-enrolling wipes
+    the previous gallery (including auto-learned templates) — a fresh trusted
+    baseline.
+    """
+    paths = []
     if 'photo' in request.files:
-        f     = request.files['photo']
-        fname = secure_filename(f'enroll_{uid}_{int(datetime.now().timestamp())}.jpg')
-        path  = os.path.join(FACE_DIR, fname)
-        f.save(path)
+        ts = int(datetime.now().timestamp())
+        for i, f in enumerate(request.files.getlist('photo')):
+            fname = secure_filename(f'enroll_{uid}_{ts}_{i}.jpg')
+            path  = os.path.join(FACE_DIR, fname)
+            f.save(path)
+            paths.append(path)
     else:
         conn = get_db()
         row  = conn.execute('SELECT photo_path FROM users WHERE id=?', (uid,)).fetchone()
         conn.close()
         if not row or not row['photo_path']:
             return err('No photo available for enrollment')
-        path = os.path.join(BASE_DIR, row['photo_path'])
+        paths.append(os.path.join(BASE_DIR, row['photo_path']))
 
-    enc = encode_face_from_image(path)
-    if enc is None:
-        return err('No face detected in the image. Please use a clear frontal photo.')
+    accepted, rejected = [], []
+    for path in paths:
+        enc, reason = encode_face_detailed(path)
+        if enc is None:
+            rejected.append(f"{os.path.basename(path)}: {reason}")
+        else:
+            accepted.append((path, enc))
 
-    rel  = os.path.relpath(path, BASE_DIR)
-    blob = encoding_to_blob(enc)
+    if not accepted:
+        return err(rejected[0] if len(rejected) == 1
+                   else 'All photos rejected — ' + ' | '.join(rejected))
+
+    anchor_path, anchor_enc = accepted[0]
+    rel  = os.path.relpath(anchor_path, BASE_DIR)
     conn = get_db()
     conn.execute(
         'UPDATE users SET face_encoding=?, photo_path=?, enrolled_at=datetime("now","localtime") WHERE id=?',
-        (blob, rel, uid)
+        (encoding_to_blob(anchor_enc), rel, uid)
     )
+    conn.execute('DELETE FROM face_templates WHERE user_id=?', (uid,))
+    for _, extra_enc in accepted[1:]:
+        conn.execute(
+            'INSERT INTO face_templates (user_id, embedding, source) VALUES (?,?,?)',
+            (uid, encoding_to_blob(extra_enc), 'enroll')
+        )
     conn.commit()
     conn.close()
     face_cache.reload()
-    return ok(msg='Face enrolled successfully')
+
+    msg = f'Face enrolled with {len(accepted)} photo(s)'
+    if rejected:
+        msg += f" — {len(rejected)} rejected: " + ' | '.join(rejected)
+    return ok(msg=msg)
+
+
+@app.route('/api/users/<int:uid>/templates', methods=['GET', 'DELETE'])
+def manage_templates(uid):
+    """Inspect or purge a user's face-template gallery.
+    DELETE ?source=auto removes only self-learned templates."""
+    if request.method == 'GET':
+        return ok({'templates': get_template_stats(uid)})
+    source  = request.args.get('source')
+    if source and source not in ('enroll', 'merge', 'auto'):
+        return err('source must be enroll, merge or auto')
+    deleted = clear_face_templates(uid, source)
+    return ok(msg=f'Deleted {deleted} template(s)')
 
 
 # ── Bulk CSV import ────────────────────────────────────────────────────────
@@ -759,22 +808,24 @@ def assign_unknown(fid):
         conn.close()
         return err('Snapshot image is missing')
 
-    new_enc = encode_face_from_image(path)
+    new_enc, reason = encode_face_detailed(path)
     if new_enc is None:
         conn.close()
-        return err('No face detected in this snapshot')
+        return err(reason or 'No face detected in this snapshot')
 
+    # Store as an extra template instead of averaging into the anchor —
+    # averaging embeddings from different poses blurs both into a weaker
+    # in-between vector; a separate template keeps each pose sharp.
     if user['face_encoding']:
-        old_enc = blob_to_encoding(user['face_encoding']).astype(np.float32)
-        merged  = old_enc + new_enc
+        conn.execute(
+            'INSERT INTO face_templates (user_id, embedding, source) VALUES (?,?,?)',
+            (user_id, encoding_to_blob(new_enc.astype(np.float32)), 'merge')
+        )
     else:
-        merged = new_enc
-    merged = merged / np.linalg.norm(merged)
-
-    conn.execute(
-        'UPDATE users SET face_encoding=?, enrolled_at=datetime("now","localtime") WHERE id=?',
-        (encoding_to_blob(merged.astype(np.float32)), user_id)
-    )
+        conn.execute(
+            'UPDATE users SET face_encoding=?, enrolled_at=datetime("now","localtime") WHERE id=?',
+            (encoding_to_blob(new_enc.astype(np.float32)), user_id)
+        )
     if uf['cluster_id']:
         # Same visitor was captured multiple times — clear the whole queue for them
         conn.execute(

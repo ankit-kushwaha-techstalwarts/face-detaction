@@ -150,6 +150,28 @@ def init_db():
         )
     ''')
 
+    # ── Face template gallery ─────────────────────────────────
+    # Multiple embeddings per user. users.face_encoding stays the trusted
+    # "anchor" (synced from the cloud portal); rows here add extra enrolment
+    # angles plus embeddings auto-learned from confident live matches.
+    #   source: 'enroll' = extra enrolment photo
+    #           'merge'  = operator assigned an unknown snapshot to this user
+    #           'auto'   = self-learned from a high-confidence camera match
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS face_templates (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            embedding   BLOB NOT NULL,
+            source      TEXT CHECK(source IN ('enroll','merge','auto')) DEFAULT 'enroll',
+            camera_id   INTEGER,
+            created_at  TEXT DEFAULT (datetime('now','localtime'))
+        )
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_face_templates_user
+            ON face_templates(user_id, source)
+    ''')
+
     # ── Audit / Activity Log ──────────────────────────────────
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -191,6 +213,14 @@ def init_db():
         ('recognition_tol', '0.50',                      'Face Recognition Tolerance','recognition'),
         ('min_face_size',   '40',                        'Minimum Face Size (px)',    'recognition'),
         ('frame_skip',      '5',                         'Process Every N Frames',    'recognition'),
+        ('det_score_thresh','0.50',  'Min Face Detection Confidence (0–1)',           'recognition'),
+        ('match_consecutive','2',    'Consecutive Matches Required to Punch',         'recognition'),
+        ('low_light_boost', '1',     'Low-Light Frame Enhancement (1=ON)',            'recognition'),
+        ('face_model',      'buffalo_l', 'InsightFace Model (buffalo_l / buffalo_sc)','recognition'),
+        ('det_size',        '640',   'Detector Input Size (px, restart required)',    'recognition'),
+        ('auto_learn',           '1',    'Self-Learn From Confident Matches (1=ON)',  'recognition'),
+        ('auto_learn_threshold', '0.65', 'Auto-Learn Min Similarity (0–1)',           'recognition'),
+        ('max_auto_templates',   '5',    'Max Auto-Learned Templates per User',       'recognition'),
         ('snapshot_save',         '1',    'Save Attendance Snapshots',              'recognition'),
         ('unknown_detection',     '1',    'Unknown Face Detection (1=ON, 0=OFF)',   'recognition'),
         ('unknown_save',          '1',    'Save Unknown Face Records',              'recognition'),

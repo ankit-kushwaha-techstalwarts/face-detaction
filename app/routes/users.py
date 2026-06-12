@@ -128,27 +128,62 @@ def enroll_face(uid):
     face_dir = current_app.FACE_DIR
     base_dir = current_app.config['BASE_DIR']
 
+    # Multi-photo enrolment: first accepted photo becomes the anchor encoding
+    # (synced to cloud), the rest are stored as extra pose templates.
+    paths = []
     if 'photo' in request.files:
-        f     = request.files['photo']
-        fname = secure_filename(f'enroll_{uid}_{int(datetime.now().timestamp())}.jpg')
-        path  = os.path.join(face_dir, fname)
-        f.save(path)
+        ts = int(datetime.now().timestamp())
+        for i, f in enumerate(request.files.getlist('photo')):
+            fname = secure_filename(f'enroll_{uid}_{ts}_{i}.jpg')
+            path  = os.path.join(face_dir, fname)
+            f.save(path)
+            paths.append(path)
     else:
         photo_path = user_dao.get_user_photo_path(uid)
         if not photo_path:
             return err('No photo available for enrolment — upload a photo first')
-        path = os.path.join(base_dir, photo_path)
+        paths.append(os.path.join(base_dir, photo_path))
 
-    enc = current_app.encode_face(path)
-    if enc is None:
-        return err('No face detected. Please use a clear, well-lit frontal photo.')
+    accepted, rejected = [], []
+    for path in paths:
+        enc, reason = current_app.encode_face_detailed(path)
+        if enc is None:
+            rejected.append(f"{os.path.basename(path)}: {reason}")
+        else:
+            accepted.append((path, enc))
 
-    rel  = os.path.relpath(path, base_dir)
-    blob = current_app.encoding_to_blob(enc)
-    user_dao.update_user_encoding(uid, blob, rel)
+    if not accepted:
+        return err(rejected[0] if len(rejected) == 1
+                   else 'All photos rejected — ' + ' | '.join(rejected))
+
+    anchor_path, anchor_enc = accepted[0]
+    rel  = os.path.relpath(anchor_path, base_dir)
+    user_dao.update_user_encoding(uid, current_app.encoding_to_blob(anchor_enc), rel)
+    # Re-enrolment resets the gallery (including auto-learned templates)
+    current_app.clear_face_templates(uid)
+    for _, extra_enc in accepted[1:]:
+        current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
     current_app.face_cache.reload()
-    audit('ENROLL_FACE', str(uid))
-    return ok(msg='Face enrolled successfully')
+    audit('ENROLL_FACE', str(uid), f"{len(accepted)} photo(s)")
+    msg = f'Face enrolled with {len(accepted)} photo(s)'
+    if rejected:
+        msg += f" — {len(rejected)} rejected: " + ' | '.join(rejected)
+    return ok(msg=msg)
+
+
+@users_bp.route('/api/users/<int:uid>/templates', methods=['GET', 'DELETE'])
+@role_required('admin', 'manager')
+def manage_templates(uid):
+    """Inspect or purge a user's face-template gallery.
+    DELETE ?source=auto removes only self-learned templates."""
+    if request.method == 'GET':
+        return ok({'templates': current_app.get_template_stats(uid)})
+    source = request.args.get('source')
+    if source and source not in ('enroll', 'merge', 'auto'):
+        return err('source must be enroll, merge or auto')
+    deleted = current_app.clear_face_templates(uid, source)
+    audit('PURGE_TEMPLATES', str(uid), f"source={source or 'all'} deleted={deleted}")
+    return ok(msg=f'Deleted {deleted} template(s)')
 
 
 # ── Bulk CSV import ────────────────────────────────────────────────────────────
