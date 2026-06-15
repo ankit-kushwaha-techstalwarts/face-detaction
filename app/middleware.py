@@ -76,7 +76,7 @@ def register_security_headers(app: Flask) -> None:
         response.headers['Referrer-Policy']           = 'strict-origin-when-cross-origin'
         response.headers['X-XSS-Protection']         = '1; mode=block'
         response.headers['Permissions-Policy']        = (
-            'camera=(), microphone=(), geolocation=()'
+            'camera=(self), microphone=(), geolocation=()'
         )
         # Only send HSTS when TLS is confirmed (avoids stripping on plain HTTP dev)
         if request.is_secure:

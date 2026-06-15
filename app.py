@@ -366,7 +366,15 @@ def list_users():
     page     = max(1, int(request.args.get('page', 1)))
     per_page = min(100, max(10, int(request.args.get('per_page', 50))))
 
-    sql  = 'SELECT id,emp_id,name,department,designation,email,phone,photo_path,active,enrolled_at FROM users WHERE 1=1'
+    if CLOUD_MODE:
+        # face_templates doesn't exist in the cloud (PostgreSQL) schema.
+        sql = ('SELECT id,emp_id,name,department,designation,email,phone,photo_path,active,enrolled_at, '
+               '0 AS template_count FROM users WHERE 1=1')
+    else:
+        sql = ('SELECT u.id,u.emp_id,u.name,u.department,u.designation,u.email,u.phone,u.photo_path,u.active,u.enrolled_at, '
+               'COALESCE(ft.cnt,0) AS template_count FROM users u '
+               'LEFT JOIN (SELECT user_id, COUNT(*) AS cnt FROM face_templates GROUP BY user_id) ft ON ft.user_id=u.id '
+               'WHERE 1=1')
     args = []
     if active != 'all':
         sql += ' AND active=?'; args.append(int(active))

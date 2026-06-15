@@ -220,7 +220,7 @@ def init_db():
         ('det_size',        '640',   'Detector Input Size (px, restart required)',    'recognition'),
         ('auto_learn',           '1',    'Self-Learn From Confident Matches (1=ON)',  'recognition'),
         ('auto_learn_threshold', '0.65', 'Auto-Learn Min Similarity (0–1)',           'recognition'),
-        ('max_auto_templates',   '5',    'Max Auto-Learned Templates per User',       'recognition'),
+        ('max_auto_templates',   '8',    'Max Auto-Learned Templates per User',       'recognition'),
         ('snapshot_save',         '1',    'Save Attendance Snapshots',              'recognition'),
         ('unknown_detection',     '1',    'Unknown Face Detection (1=ON, 0=OFF)',   'recognition'),
         ('unknown_save',          '1',    'Save Unknown Face Records',              'recognition'),

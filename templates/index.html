@@ -190,6 +190,13 @@ tr:hover td{background:var(--gray-50)}
   padding:3px 8px;border-radius:4px;
 }
 .webcam-controls{display:flex;gap:8px;margin-top:10px;justify-content:center}
+/* ─── Enrollment step guide ───────────────────────────────── */
+.enroll-step-guide{text-align:center;margin-bottom:10px}
+.enroll-step-instruction{font-size:15px;font-weight:600;margin-top:2px}
+.enroll-step-dots{display:flex;gap:6px;justify-content:center;margin-top:8px}
+.step-dot{width:9px;height:9px;border-radius:50%;background:var(--gray-200);transition:background .2s}
+.step-dot.done{background:var(--green)}
+.step-dot.current{background:var(--blue)}
 .cam-captured-preview{
   width:100%;border-radius:var(--radius);display:block;
   border:2px solid var(--green);
@@ -545,7 +552,7 @@ tr:hover td{background:var(--gray-50)}
     <div class="card" style="padding:0;overflow:hidden">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Photo</th><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Contact</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Photo</th><th>Emp ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Contact</th><th>Enrolled</th><th>Photos</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="users-tbody"></tbody>
         </table>
       </div>
@@ -1136,12 +1143,12 @@ tr:hover td{background:var(--gray-50)}
 <!-- Add / Edit User Modal -->
 <div class="modal-overlay" id="modal-user">
   <div class="modal">
-    <button class="modal-close" onclick="stopProfileSnap();closeModal('modal-user')">✕</button>
+    <button class="modal-close" onclick="stopProfileSnap();nuWidget.stopWebcam();closeModal('modal-user')">✕</button>
     <h2 id="modal-user-title">Add Employee</h2>
     <form id="user-form" onsubmit="submitUser(event)">
       <input type="hidden" id="uf-id"/>
-      <!-- Profile photo: upload or quick webcam snap -->
-      <div style="text-align:center;margin-bottom:16px">
+      <!-- Profile photo: upload or quick webcam snap (Edit Employee only) -->
+      <div id="uf-photo-section" style="text-align:center;margin-bottom:16px">
         <div style="position:relative;display:inline-block">
           <img id="uf-photo-preview" class="photo-preview"
                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3Ccircle cx='40' cy='30' r='15' fill='%239ca3af'/%3E%3Cellipse cx='40' cy='65' rx='22' ry='15' fill='%239ca3af'/%3E%3C/svg%3E"/>
@@ -1164,6 +1171,88 @@ tr:hover td{background:var(--gray-50)}
                   onclick="startProfileSnap()">📷 Camera</button>
         </div>
       </div>
+
+      <!-- Guided multi-pose face enrolment (Add Employee only) -->
+      <div id="uf-enroll-section" style="display:none;margin-bottom:16px">
+        <p class="text-xs text-gray mb-2" style="text-align:center">
+          🤖 Capture 3–5 face photos now to enroll this employee for recognition
+          (optional — can be done later from the employee's row).
+        </p>
+
+        <!-- Tabs -->
+        <div class="enroll-tabs">
+          <button type="button" class="enroll-tab active" id="nu-tab-webcam" onclick="nuWidget.switchTab('webcam')">📷 Use Camera</button>
+          <button type="button" class="enroll-tab"        id="nu-tab-upload" onclick="nuWidget.switchTab('upload')">⬆ Upload Photos</button>
+        </div>
+
+        <!-- Step-by-step pose guide (applies to both Camera and Upload) -->
+        <div class="enroll-step-guide" id="nu-enroll-step-guide">
+          <div class="text-xs text-gray" id="nu-enroll-step-label">Step 1 of 5</div>
+          <div class="enroll-step-instruction" id="nu-enroll-step-instruction">😐 Look straight at the camera</div>
+          <div class="enroll-step-dots" id="nu-enroll-step-dots"></div>
+        </div>
+
+        <!-- ── Webcam Panel ── -->
+        <div class="enroll-panel active" id="nu-panel-webcam">
+          <div id="nu-webcam-live-wrap">
+            <div class="webcam-wrap" id="nu-webcam-box">
+              <video id="nu-enroll-video" autoplay playsinline muted></video>
+              <div class="webcam-guide">
+                <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <ellipse cx="100" cy="100" rx="72" ry="88"
+                    stroke="white" stroke-width="2.5" stroke-dasharray="8 5"/>
+                </svg>
+              </div>
+              <div class="webcam-corner" id="nu-webcam-status-badge">Starting…</div>
+            </div>
+            <div class="webcam-controls">
+              <button type="button" class="btn btn-outline btn-sm" id="nu-btn-flip" onclick="nuWidget.flipCamera()">🔄 Flip</button>
+              <button type="button" class="btn btn-primary"        id="nu-btn-capture" onclick="nuWidget.captureFrame()" disabled>📸 Capture</button>
+            </div>
+          </div>
+          <!-- Captured preview -->
+          <div id="nu-webcam-captured-wrap" style="display:none">
+            <canvas id="nu-enroll-canvas" class="cam-captured-preview"></canvas>
+            <div class="webcam-controls mt-2">
+              <button type="button" class="btn btn-outline" onclick="nuWidget.retakePhoto()">🔁 Retake</button>
+              <button type="button" class="btn btn-success" onclick="nuWidget.addCapturedToQueue()">➕ Add Photo &amp; Continue</button>
+            </div>
+          </div>
+          <!-- No camera fallback -->
+          <div id="nu-webcam-error" style="display:none;text-align:center;padding:28px 0">
+            <div style="font-size:40px">🚫</div>
+            <p class="text-sm mt-2" style="color:var(--red)" id="nu-webcam-error-msg">Camera not accessible.</p>
+            <p class="text-xs text-gray mt-1">Switch to <strong>Upload Photos</strong> tab instead.</p>
+          </div>
+        </div>
+
+        <!-- ── Upload Panel ── -->
+        <div class="enroll-panel" id="nu-panel-upload">
+          <div class="photo-upload mb-3" id="nu-enroll-drop"
+               onclick="document.getElementById('nu-enroll-photo').click()"
+               ondragover="event.preventDefault();this.classList.add('drag')"
+               ondragleave="this.classList.remove('drag')"
+               ondrop="event.preventDefault();this.classList.remove('drag');nuWidget.addFiles(event.dataTransfer.files)">
+            <div style="font-size:36px">📂</div>
+            <p class="text-sm mt-2">Click or drag &amp; drop to add photos</p>
+            <p class="text-xs text-gray">JPG, PNG, WEBP — 3–5 photos recommended:<br/>
+              one clear frontal + slight left/right angles + one from slightly above<br/>
+              (similar to your CCTV camera view), good lighting, no mask/cap</p>
+          </div>
+          <input type="file" id="nu-enroll-photo" accept="image/*" multiple style="display:none"
+                 onchange="nuWidget.addFiles(this.files);this.value=''"/>
+        </div>
+
+        <!-- ── Photo queue ── -->
+        <div id="nu-enroll-queue-wrap" class="mt-3" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="text-sm" style="font-weight:600">Photos to enroll (<span id="nu-enroll-count">0</span>)</span>
+            <button type="button" class="btn btn-outline btn-xs" onclick="nuWidget.clearQueue()">Clear all</button>
+          </div>
+          <div id="nu-enroll-thumbs" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px"></div>
+        </div>
+      </div>
+
       <div class="form-grid">
         <div class="form-group"><label>Employee ID *</label><input type="text" id="uf-emp_id" required placeholder="e.g. EMP001"/></div>
         <div class="form-group"><label>Full Name *</label><input type="text" id="uf-name" required placeholder="Full name"/></div>
@@ -1175,7 +1264,7 @@ tr:hover td{background:var(--gray-50)}
         <div class="form-group"><label>Phone</label><input type="tel" id="uf-phone" placeholder="Mobile number"/></div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
-        <button type="button" class="btn btn-outline" onclick="stopProfileSnap();closeModal('modal-user')">Cancel</button>
+        <button type="button" class="btn btn-outline" onclick="stopProfileSnap();nuWidget.stopWebcam();closeModal('modal-user')">Cancel</button>
         <button type="submit" class="btn btn-primary" id="uf-submit">Save Employee</button>
       </div>
     </form>
@@ -1192,8 +1281,15 @@ tr:hover td{background:var(--gray-50)}
 
     <!-- Tabs -->
     <div class="enroll-tabs">
-      <button class="enroll-tab active" id="tab-webcam" onclick="switchEnrollTab('webcam')">📷 Use Camera</button>
-      <button class="enroll-tab"        id="tab-upload" onclick="switchEnrollTab('upload')">⬆ Upload Photos</button>
+      <button class="enroll-tab active" id="tab-webcam" onclick="enrollWidget.switchTab('webcam')">📷 Use Camera</button>
+      <button class="enroll-tab"        id="tab-upload" onclick="enrollWidget.switchTab('upload')">⬆ Upload Photos</button>
+    </div>
+
+    <!-- Step-by-step pose guide (applies to both Camera and Upload) -->
+    <div class="enroll-step-guide" id="enroll-step-guide">
+      <div class="text-xs text-gray" id="enroll-step-label">Step 1 of 5</div>
+      <div class="enroll-step-instruction" id="enroll-step-instruction">😐 Look straight at the camera</div>
+      <div class="enroll-step-dots" id="enroll-step-dots"></div>
     </div>
 
     <!-- ── Webcam Panel ── -->
@@ -1211,20 +1307,19 @@ tr:hover td{background:var(--gray-50)}
           <div class="webcam-corner" id="webcam-status-badge">Starting…</div>
         </div>
         <div class="webcam-controls">
-          <button class="btn btn-outline btn-sm" id="btn-flip" onclick="flipCamera()">🔄 Flip</button>
-          <button class="btn btn-primary"        id="btn-capture" onclick="captureFrame()" disabled>📸 Capture</button>
+          <button class="btn btn-outline btn-sm" id="btn-flip" onclick="enrollWidget.flipCamera()">🔄 Flip</button>
+          <button class="btn btn-primary"        id="btn-capture" onclick="enrollWidget.captureFrame()" disabled>📸 Capture</button>
         </div>
         <p class="text-xs text-gray mt-2" style="text-align:center">
-          Capture several shots: frontal, slight left/right turns, and one with chin
-          slightly down (matches the high ceiling-camera angle). Each capture is added below.
+          Follow the prompt above for each shot — every capture is added to the queue below.
         </p>
       </div>
       <!-- Captured preview -->
       <div id="webcam-captured-wrap" style="display:none">
         <canvas id="enroll-canvas" class="cam-captured-preview"></canvas>
         <div class="webcam-controls mt-2">
-          <button class="btn btn-outline" onclick="retakePhoto()">🔁 Retake</button>
-          <button class="btn btn-success" onclick="addCapturedToQueue()">➕ Add Photo &amp; Continue</button>
+          <button class="btn btn-outline" onclick="enrollWidget.retakePhoto()">🔁 Retake</button>
+          <button class="btn btn-success" onclick="enrollWidget.addCapturedToQueue()">➕ Add Photo &amp; Continue</button>
         </div>
       </div>
       <!-- No camera fallback -->
@@ -1241,7 +1336,7 @@ tr:hover td{background:var(--gray-50)}
            onclick="document.getElementById('enroll-photo').click()"
            ondragover="event.preventDefault();this.classList.add('drag')"
            ondragleave="this.classList.remove('drag')"
-           ondrop="event.preventDefault();this.classList.remove('drag');addEnrollFiles(event.dataTransfer.files)">
+           ondrop="event.preventDefault();this.classList.remove('drag');enrollWidget.addFiles(event.dataTransfer.files)">
         <div style="font-size:36px">📂</div>
         <p class="text-sm mt-2">Click or drag &amp; drop to add photos</p>
         <p class="text-xs text-gray">JPG, PNG, WEBP — 3–5 photos recommended:<br/>
@@ -1249,14 +1344,14 @@ tr:hover td{background:var(--gray-50)}
           (similar to your CCTV camera view), good lighting, no mask/cap</p>
       </div>
       <input type="file" id="enroll-photo" accept="image/*" multiple style="display:none"
-             onchange="addEnrollFiles(this.files);this.value=''"/>
+             onchange="enrollWidget.addFiles(this.files);this.value=''"/>
     </div>
 
     <!-- ── Photo queue (shared by both tabs) ── -->
     <div id="enroll-queue-wrap" class="mt-3" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span class="text-sm" style="font-weight:600">Photos to enroll (<span id="enroll-count">0</span>)</span>
-        <button class="btn btn-outline btn-xs" onclick="clearEnrollQueue()">Clear all</button>
+        <button class="btn btn-outline btn-xs" onclick="enrollWidget.clearQueue()">Clear all</button>
       </div>
       <div id="enroll-thumbs" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px"></div>
       <div id="enroll-mode-wrap" class="mt-3" style="display:none">
@@ -2139,8 +2234,10 @@ async function loadUsers(page = 1) {
   $('users-total').textContent = `${total} employee${total !== 1 ? 's' : ''}`;
 
   $('users-tbody').innerHTML = users.length === 0
-    ? `<tr class="empty-row"><td colspan="9">No employees found</td></tr>`
-    : users.map(u => `<tr>
+    ? `<tr class="empty-row"><td colspan="10">No employees found</td></tr>`
+    : users.map(u => {
+        const photoCount = (u.enrolled_at ? 1 : 0) + (u.template_count || 0);
+        return `<tr>
         <td>
           <img class="avatar"
                src="${u.photo_path ? '/' + u.photo_path : ''}"
@@ -2152,6 +2249,9 @@ async function loadUsers(page = 1) {
         <td class="text-gray">${u.designation || '—'}</td>
         <td class="text-gray">${u.email || u.phone || '—'}</td>
         <td class="text-gray">${u.enrolled_at ? fmtDate(u.enrolled_at) : '<span style="color:var(--orange)">Not enrolled</span>'}</td>
+        <td>${photoCount > 0
+              ? `<span class="tag" title="${u.template_count || 0} extra template(s) + ${u.enrolled_at ? 1 : 0} anchor photo">📷 ${photoCount}</span>`
+              : '<span class="text-gray">—</span>'}</td>
         <td><span class="tag ${u.active ? 'tag-active' : 'tag-inactive'}">${u.active ? 'Active' : 'Inactive'}</span></td>
         <td>
           <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -2160,7 +2260,8 @@ async function loadUsers(page = 1) {
             <button class="btn btn-outline btn-xs" style="color:var(--red)" onclick="deactivateUser(${u.id})">🗑</button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
 
   renderPagination('users-pagination', page, pages, loadUsers);
 }
@@ -2179,6 +2280,9 @@ function openAddUserModal() {
   $('user-form').reset();
   $('uf-id').value = '';
   $('uf-photo-preview').src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3C/svg%3E";
+  $('uf-photo-section').style.display = 'none';
+  $('uf-enroll-section').style.display = '';
+  nuWidget.reset();
   openModal('modal-user');
 }
 
@@ -2195,6 +2299,9 @@ async function openEditUser(id) {
   $('uf-email').value       = u.email||'';
   $('uf-phone').value       = u.phone||'';
   $('uf-photo-preview').src = u.photo_path?'/'+u.photo_path:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%23e5e7eb'/%3E%3C/svg%3E";
+  $('uf-photo-section').style.display = '';
+  $('uf-enroll-section').style.display = 'none';
+  nuWidget.stopWebcam();
   openModal('modal-user');
 }
 
@@ -2215,12 +2322,22 @@ async function submitUser(e) {
     if(r.status!=='ok'){toast(r.message,'error');return;}
     uid = r.data.id;
   }
-  // Upload photo if selected
-  const photoFile = $('uf-photo').files[0];
-  if(photoFile && uid) {
-    const fd = new FormData(); fd.append('photo', photoFile);
-    await fetch(`/api/users/${uid}/photo`,{method:'POST',body:fd});
+  if(id) {
+    // Edit Employee: single profile-photo upload
+    const photoFile = $('uf-photo').files[0];
+    if(photoFile && uid) {
+      const fd = new FormData(); fd.append('photo', photoFile);
+      await fetch(`/api/users/${uid}/photo`,{method:'POST',body:fd});
+    }
+  } else if(uid && nuWidget.queue.length) {
+    // Add Employee: enroll the guided multi-pose photo queue
+    const fd = new FormData();
+    for (const p of nuWidget.queue) fd.append('photo', p.file, p.file.name);
+    fd.append('mode', 'replace');
+    const er = await fetch(`/api/users/${uid}/enroll`,{method:'POST',body:fd}).then(x=>x.json());
+    if(er.status !== 'ok') toast(`Employee created, but face enrolment failed: ${er.message}`,'error');
   }
+  if(!id) { nuWidget.stopWebcam(); nuWidget.clearQueue(); }
   toast(id?'Employee updated':'Employee created','success');
   closeModal('modal-user');
   loadUsers();
@@ -2241,28 +2358,229 @@ async function deactivateUser(id) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  WEBCAM — ENROLLMENT MODAL
+//  GUIDED POSE-CAPTURE WIDGET (camera + upload + step guide)
+//  Shared by the "Enroll Face" modal (enrollWidget) and the
+//  "Add Employee" modal's guided face enrolment (nuWidget).
 // ══════════════════════════════════════════════════════════
-const webcam = {
-  stream:    null,
-  facingMode:'user',    // 'user' = front, 'environment' = back
-  captured:  null,      // ImageData blob waiting to be submitted
-};
+const ENROLL_STEPS = [
+  { icon:'😐', text:'Look straight at the camera' },
+  { icon:'↩️', text:'Turn your head slightly LEFT' },
+  { icon:'↪️', text:'Turn your head slightly RIGHT' },
+  { icon:'⬇️', text:'Tilt your chin down slightly (matches ceiling-camera angle)' },
+  { icon:'⬆️', text:'Tilt your chin up slightly' },
+];
+
+function createPoseWizard(ids) {
+  const cam   = { stream: null, facingMode: 'user', captured: null };
+  const queue = [];
+
+  function switchTab(tab) {
+    ['webcam','upload'].forEach(t => {
+      $(ids[t+'Tab']).classList.toggle('active', t===tab);
+      $(ids[t+'Panel']).classList.toggle('active', t===tab);
+    });
+    if (tab === 'webcam') startWebcam(); else stopWebcam();
+  }
+
+  async function startWebcam() {
+    // Already running
+    if (cam.stream && cam.stream.active) return;
+    stopWebcam();
+
+    const badge  = $(ids.statusBadge);
+    const video  = $(ids.video);
+    const btnCap = $(ids.btnCapture);
+    badge.textContent = 'Starting…';
+    btnCap.disabled   = true;
+    $(ids.webcamError).style.display    = 'none';
+    $(ids.webcamLiveWrap).style.display = '';
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: cam.facingMode, width:{ideal:1280}, height:{ideal:720} },
+        audio: false
+      });
+      cam.stream      = stream;
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        badge.textContent  = '● Live';
+        badge.style.background = 'rgba(5,122,85,.8)';
+        btnCap.disabled    = false;
+      };
+    } catch(err) {
+      const msgs = {
+        NotAllowedError:  'Camera permission denied. Please allow camera access in browser settings.',
+        NotFoundError:    'No camera found on this device.',
+        NotReadableError: 'Camera is in use by another application.',
+      };
+      $(ids.webcamErrorMsg).textContent = msgs[err.name] || `Camera error: ${err.message}`;
+      $(ids.webcamError).style.display    = '';
+      $(ids.webcamLiveWrap).style.display = 'none';
+      switchTab('upload');   // auto-fallback
+    }
+  }
+
+  function stopWebcam() {
+    if (cam.stream) {
+      cam.stream.getTracks().forEach(t => t.stop());
+      cam.stream = null;
+    }
+    const video = $(ids.video);
+    if (video) video.srcObject = null;
+    const btn = $(ids.btnCapture);
+    if (btn) btn.disabled = true;
+  }
+
+  function flipCamera() {
+    cam.facingMode = cam.facingMode === 'user' ? 'environment' : 'user';
+    startWebcam();
+  }
+
+  function captureFrame() {
+    const video  = $(ids.video);
+    const canvas = $(ids.canvas);
+    if (!video || !video.videoWidth) { toast('Camera not ready', 'error'); return; }
+
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+
+    // Mirror horizontally if front camera (matches what user sees)
+    if (cam.facingMode === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0);
+
+    canvas.toBlob(blob => {
+      cam.captured = blob;
+      stopWebcam();
+      $(ids.webcamLiveWrap).style.display     = 'none';
+      $(ids.webcamCapturedWrap).style.display = '';
+    }, 'image/jpeg', 0.92);
+  }
+
+  function retakePhoto() {
+    cam.captured = null;
+    $(ids.webcamCapturedWrap).style.display = 'none';
+    $(ids.webcamLiveWrap).style.display     = '';
+    startWebcam();
+  }
+
+  function addCapturedToQueue() {
+    if (!cam.captured) { toast('No photo captured', 'error'); return; }
+    const f = new File([cam.captured], `webcam_${queue.length+1}.jpg`, {type:'image/jpeg'});
+    queue.push({ file: f, url: URL.createObjectURL(f) });
+    cam.captured = null;
+    renderQueue();
+    retakePhoto();   // back to live view for the next angle
+  }
+
+  function addFiles(files) {
+    for (const f of files) {
+      if (!f.type || !f.type.startsWith('image/')) continue;
+      queue.push({ file: f, url: URL.createObjectURL(f) });
+    }
+    renderQueue();
+  }
+
+  function removePhoto(i) {
+    URL.revokeObjectURL(queue[i].url);
+    queue.splice(i, 1);
+    renderQueue();
+  }
+
+  function clearQueue() {
+    queue.forEach(p => URL.revokeObjectURL(p.url));
+    queue.length = 0;
+    renderQueue();
+  }
+
+  function renderStep() {
+    const guide = $(ids.stepGuide);
+    if (!guide) return;
+    const n = queue.length;
+    $(ids.stepDots).innerHTML = ENROLL_STEPS.map((_, i) =>
+      `<span class="step-dot ${i < n ? 'done' : i === n ? 'current' : ''}"></span>`
+    ).join('');
+    if (n < ENROLL_STEPS.length) {
+      const step = ENROLL_STEPS[n];
+      $(ids.stepLabel).textContent = `Step ${n + 1} of ${ENROLL_STEPS.length}`;
+      $(ids.stepInstruction).textContent = `${step.icon} ${step.text}`;
+    } else {
+      $(ids.stepLabel).textContent = `All ${ENROLL_STEPS.length} angles captured ✅`;
+      $(ids.stepInstruction).textContent = 'Add extra angles (optional) or tap Enroll Photos below';
+    }
+  }
+
+  function renderQueue() {
+    const wrap = $(ids.queueWrap);
+    if (!wrap) return;
+    wrap.style.display = queue.length ? '' : 'none';
+    $(ids.count).textContent = queue.length;
+    $(ids.thumbs).innerHTML = queue.map((p, i) => `
+      <div class="enroll-thumb">
+        <img src="${p.url}" alt="photo ${i+1}"/>
+        <button type="button" class="rm" title="Remove" onclick="${ids.name}.removePhoto(${i})">✕</button>
+      </div>`).join('');
+    renderStep();
+    if (ids.onRender) ids.onRender(queue);
+  }
+
+  function reset() {
+    clearQueue();
+    cam.captured = null;
+    $(ids.webcamLiveWrap).style.display     = '';
+    $(ids.webcamCapturedWrap).style.display = 'none';
+    $(ids.webcamError).style.display        = 'none';
+    switchTab('webcam');
+  }
+
+  return {
+    switchTab, startWebcam, stopWebcam, flipCamera, captureFrame, retakePhoto,
+    addCapturedToQueue, addFiles, removePhoto, clearQueue, renderQueue, reset,
+    queue,
+  };
+}
+
+// "Enroll Face" modal — existing employees
+const enrollWidget = createPoseWizard({
+  name: 'enrollWidget',
+  webcamTab: 'tab-webcam', uploadTab: 'tab-upload',
+  webcamPanel: 'panel-webcam', uploadPanel: 'panel-upload',
+  stepGuide: 'enroll-step-guide', stepLabel: 'enroll-step-label',
+  stepInstruction: 'enroll-step-instruction', stepDots: 'enroll-step-dots',
+  webcamLiveWrap: 'webcam-live-wrap', video: 'enroll-video',
+  statusBadge: 'webcam-status-badge', btnCapture: 'btn-capture',
+  webcamCapturedWrap: 'webcam-captured-wrap', canvas: 'enroll-canvas',
+  webcamError: 'webcam-error', webcamErrorMsg: 'webcam-error-msg',
+  queueWrap: 'enroll-queue-wrap', count: 'enroll-count', thumbs: 'enroll-thumbs',
+  onRender: queue => {
+    $('btn-enroll-submit').textContent = `✅ Enroll ${queue.length} Photo${queue.length>1?'s':''}`;
+  },
+});
+
+// "Add Employee" modal — guided face enrolment for new employees
+const nuWidget = createPoseWizard({
+  name: 'nuWidget',
+  webcamTab: 'nu-tab-webcam', uploadTab: 'nu-tab-upload',
+  webcamPanel: 'nu-panel-webcam', uploadPanel: 'nu-panel-upload',
+  stepGuide: 'nu-enroll-step-guide', stepLabel: 'nu-enroll-step-label',
+  stepInstruction: 'nu-enroll-step-instruction', stepDots: 'nu-enroll-step-dots',
+  webcamLiveWrap: 'nu-webcam-live-wrap', video: 'nu-enroll-video',
+  statusBadge: 'nu-webcam-status-badge', btnCapture: 'nu-btn-capture',
+  webcamCapturedWrap: 'nu-webcam-captured-wrap', canvas: 'nu-enroll-canvas',
+  webcamError: 'nu-webcam-error', webcamErrorMsg: 'nu-webcam-error-msg',
+  queueWrap: 'nu-enroll-queue-wrap', count: 'nu-enroll-count', thumbs: 'nu-enroll-thumbs',
+});
 
 function openEnroll(uid) {
   $('enroll-uid').value = uid;
   $('enroll-status').innerHTML = '';
   $('enroll-photo').value = '';
-  webcam.captured = null;
-  clearEnrollQueue();
   loadEnrollStatus(uid);
-  // Reset to live view
-  $('webcam-live-wrap').style.display    = '';
-  $('webcam-captured-wrap').style.display = 'none';
-  $('webcam-error').style.display        = 'none';
-  switchEnrollTab('webcam');
+  enrollWidget.reset();
   openModal('modal-enroll');
-  startWebcam();
 }
 
 // Current enrollment summary shown at the top of the modal
@@ -2292,70 +2610,25 @@ async function loadEnrollStatus(uid) {
   } catch(e) { /* status line is informational only */ }
 }
 
-// ── Photo queue (shared by webcam captures and file uploads) ──
-const enrollQueue = [];
-
-function addEnrollFiles(files) {
-  for (const f of files) {
-    if (!f.type || !f.type.startsWith('image/')) continue;
-    enrollQueue.push({ file: f, url: URL.createObjectURL(f) });
-  }
-  renderEnrollQueue();
-}
-
-function addCapturedToQueue() {
-  if (!webcam.captured) { toast('No photo captured', 'error'); return; }
-  const f = new File([webcam.captured], `webcam_${enrollQueue.length+1}.jpg`, {type:'image/jpeg'});
-  enrollQueue.push({ file: f, url: URL.createObjectURL(f) });
-  webcam.captured = null;
-  renderEnrollQueue();
-  retakePhoto();   // back to live view for the next angle
-}
-
-function removeEnrollPhoto(i) {
-  URL.revokeObjectURL(enrollQueue[i].url);
-  enrollQueue.splice(i, 1);
-  renderEnrollQueue();
-}
-
-function clearEnrollQueue() {
-  enrollQueue.forEach(p => URL.revokeObjectURL(p.url));
-  enrollQueue.length = 0;
-  renderEnrollQueue();
-}
-
-function renderEnrollQueue() {
-  const wrap = $('enroll-queue-wrap');
-  if (!wrap) return;
-  wrap.style.display = enrollQueue.length ? '' : 'none';
-  $('enroll-count').textContent = enrollQueue.length;
-  $('enroll-thumbs').innerHTML = enrollQueue.map((p, i) => `
-    <div class="enroll-thumb">
-      <img src="${p.url}" alt="photo ${i+1}"/>
-      <button type="button" class="rm" title="Remove" onclick="removeEnrollPhoto(${i})">✕</button>
-    </div>`).join('');
-  $('btn-enroll-submit').textContent = `✅ Enroll ${enrollQueue.length} Photo${enrollQueue.length>1?'s':''}`;
-}
-
 async function submitEnrollQueue() {
   const uid = $('enroll-uid').value;
-  if (!enrollQueue.length) return;
+  if (!enrollWidget.queue.length) return;
   const mode = enrollHasFace
     ? (document.querySelector('input[name="enroll-mode"]:checked')?.value || 'append')
     : 'replace';
   const st  = $('enroll-status');
   const btn = $('btn-enroll-submit');
   btn.disabled = true;
-  st.innerHTML = `<div class="flex items-center gap-2"><span class="loader"></span> Processing ${enrollQueue.length} photo(s)…</div>`;
+  st.innerHTML = `<div class="flex items-center gap-2"><span class="loader"></span> Processing ${enrollWidget.queue.length} photo(s)…</div>`;
   const fd = new FormData();
-  for (const p of enrollQueue) fd.append('photo', p.file, p.file.name);
+  for (const p of enrollWidget.queue) fd.append('photo', p.file, p.file.name);
   fd.append('mode', mode);
   try {
     const r = await fetch(`/api/users/${uid}/enroll`, {method:'POST', body:fd}).then(x=>x.json());
     if (r.status === 'ok') {
       st.innerHTML = `<p style="color:var(--green);font-weight:600">✅ ${r.message || 'Face enrolled successfully!'}</p>`;
       toast('Face photos enrolled!', 'success');
-      clearEnrollQueue();
+      enrollWidget.clearQueue();
       loadEnrollStatus(uid);
       loadUsers();
     } else {
@@ -2368,107 +2641,9 @@ async function submitEnrollQueue() {
 }
 
 function closeEnrollModal() {
-  stopWebcam();
-  clearEnrollQueue();
+  enrollWidget.stopWebcam();
+  enrollWidget.clearQueue();
   closeModal('modal-enroll');
-}
-
-function switchEnrollTab(tab) {
-  ['webcam','upload'].forEach(t => {
-    $('tab-'+t).classList.toggle('active', t===tab);
-    $('panel-'+t).classList.toggle('active', t===tab);
-  });
-  if (tab === 'webcam') {
-    startWebcam();
-  } else {
-    stopWebcam();
-  }
-}
-
-async function startWebcam() {
-  // Already running
-  if (webcam.stream && webcam.stream.active) return;
-  stopWebcam();
-
-  const badge  = $('webcam-status-badge');
-  const video  = $('enroll-video');
-  const btnCap = $('btn-capture');
-  badge.textContent = 'Starting…';
-  btnCap.disabled   = true;
-  $('webcam-error').style.display     = 'none';
-  $('webcam-live-wrap').style.display = '';
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: webcam.facingMode, width:{ideal:1280}, height:{ideal:720} },
-      audio: false
-    });
-    webcam.stream   = stream;
-    video.srcObject = stream;
-    video.onloadedmetadata = () => {
-      badge.textContent  = '● Live';
-      badge.style.background = 'rgba(5,122,85,.8)';
-      btnCap.disabled    = false;
-    };
-  } catch(err) {
-    const msgs = {
-      NotAllowedError:  'Camera permission denied. Please allow camera access in browser settings.',
-      NotFoundError:    'No camera found on this device.',
-      NotReadableError: 'Camera is in use by another application.',
-    };
-    $('webcam-error-msg').textContent = msgs[err.name] || `Camera error: ${err.message}`;
-    $('webcam-error').style.display     = '';
-    $('webcam-live-wrap').style.display = 'none';
-    switchEnrollTab('upload');   // auto-fallback
-  }
-}
-
-function stopWebcam() {
-  if (webcam.stream) {
-    webcam.stream.getTracks().forEach(t => t.stop());
-    webcam.stream = null;
-  }
-  const video = $('enroll-video');
-  if (video) video.srcObject = null;
-  const btn = $('btn-capture');
-  if (btn) btn.disabled = true;
-}
-
-function flipCamera() {
-  webcam.facingMode = webcam.facingMode === 'user' ? 'environment' : 'user';
-  startWebcam();
-}
-
-function captureFrame() {
-  const video  = $('enroll-video');
-  const canvas = $('enroll-canvas');
-  if (!video || !video.videoWidth) { toast('Camera not ready', 'error'); return; }
-
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-
-  // Mirror horizontally if front camera (matches what user sees)
-  if (webcam.facingMode === 'user') {
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-  }
-  ctx.drawImage(video, 0, 0);
-
-  // Convert to blob and store
-  canvas.toBlob(blob => {
-    webcam.captured = blob;
-    stopWebcam();
-    $('webcam-live-wrap').style.display     = 'none';
-    $('webcam-captured-wrap').style.display = '';
-  }, 'image/jpeg', 0.92);
-}
-
-function retakePhoto() {
-  webcam.captured = null;
-  $('webcam-captured-wrap').style.display = 'none';
-  $('webcam-live-wrap').style.display     = '';
-  startWebcam();
 }
 
 // ── Profile photo quick-snap (in Add Employee modal) ────────

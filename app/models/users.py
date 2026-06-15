@@ -11,7 +11,7 @@ import io
 import logging
 from typing import Optional
 
-from app.models import get_db, PH
+from app.models import get_db, PH, CLOUD_MODE
 
 log = logging.getLogger('faceattend.models.users')
 
@@ -32,11 +32,24 @@ def list_users(
     -------
     dict with keys: users, total, page, per_page, pages
     """
-    sql  = (
-        'SELECT id, emp_id, name, department, designation, '
-        '       email, phone, photo_path, active, enrolled_at '
-        'FROM users WHERE 1=1'
-    )
+    if CLOUD_MODE:
+        # face_templates doesn't exist in the cloud (PostgreSQL) schema.
+        sql = (
+            'SELECT id, emp_id, name, department, designation, '
+            '       email, phone, photo_path, active, enrolled_at, '
+            '       0 AS template_count '
+            'FROM users WHERE 1=1'
+        )
+    else:
+        sql = (
+            'SELECT u.id, u.emp_id, u.name, u.department, u.designation, '
+            '       u.email, u.phone, u.photo_path, u.active, u.enrolled_at, '
+            '       COALESCE(ft.cnt, 0) AS template_count '
+            'FROM users u '
+            'LEFT JOIN (SELECT user_id, COUNT(*) AS cnt FROM face_templates GROUP BY user_id) ft '
+            '       ON ft.user_id = u.id '
+            'WHERE 1=1'
+        )
     args: list = []
 
     if active != 'all':

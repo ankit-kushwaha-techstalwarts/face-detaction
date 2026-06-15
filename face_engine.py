@@ -37,6 +37,13 @@ os.environ.setdefault(
     'rtsp_transport;tcp|buffer_size;2097152|max_delay;500000|fflags;nobuffer|flags;low_delay'
 )
 
+# OpenCV's internal parallel_for_ thread pool defaults to one thread per CPU
+# core and is used by every cv2.resize/cvtColor/etc. call. Each CameraWorker
+# already runs on its own thread, so that per-call fan-out is redundant nested
+# parallelism: with multiple cameras processing frames concurrently, each one
+# repeatedly spins up a 20-thread pool, saturating every core. Cap it to 1.
+cv2.setNumThreads(1)
+
 BASE_DIR     = os.path.dirname(__file__)
 SNAPSHOT_DIR = os.path.join(BASE_DIR, 'uploads', 'snapshots')
 UNKNOWN_DIR  = os.path.join(BASE_DIR, 'uploads', 'unknown')
@@ -80,15 +87,41 @@ def get_insight_app():
 
                 log.info(f"[InsightFace] Loading model '{model_name}' "
                          f"det_size={det_size} (first run downloads weights)…")
-                app = FaceAnalysis(
-                    name=model_name,
-                    allowed_modules=['detection', 'recognition'],
-                    providers=['CPUExecutionProvider']
-                )
-                # det_thresh below the 0.5 library default: keep recall high
-                # here, then filter weak hits per-frame with the runtime
-                # 'det_score_thresh' setting (adjustable without restart).
-                app.prepare(ctx_id=0, det_size=(det_size, det_size), det_thresh=0.40)
+
+                # insightface's model_zoo.get_model() only forwards 'providers'/
+                # 'provider_options' to onnxruntime.InferenceSession, so a
+                # sess_options kwarg can't reach it through FaceAnalysis(...).
+                # Temporarily wrap InferenceSession.__init__ to inject a capped
+                # thread pool for the detection + recognition sessions it
+                # creates — without this each session defaults to one intra-op
+                # thread per CPU core, and with several cameras running
+                # inference concurrently that's a second source (alongside
+                # cv2's pool above) of all-core saturation.
+                import onnxruntime as _ort
+                _orig_ort_init = _ort.InferenceSession.__init__
+
+                def _capped_ort_init(self, *a, **kw):
+                    if kw.get('sess_options') is None:
+                        so = _ort.SessionOptions()
+                        so.intra_op_num_threads = 2
+                        so.inter_op_num_threads = 1
+                        kw['sess_options'] = so
+                    return _orig_ort_init(self, *a, **kw)
+
+                _ort.InferenceSession.__init__ = _capped_ort_init
+                try:
+                    app = FaceAnalysis(
+                        name=model_name,
+                        allowed_modules=['detection', 'recognition'],
+                        providers=['CPUExecutionProvider']
+                    )
+                    # det_thresh below the 0.5 library default: keep recall high
+                    # here, then filter weak hits per-frame with the runtime
+                    # 'det_score_thresh' setting (adjustable without restart).
+                    app.prepare(ctx_id=0, det_size=(det_size, det_size), det_thresh=0.40)
+                finally:
+                    _ort.InferenceSession.__init__ = _orig_ort_init
+
                 _insight_app = app
                 log.info("[InsightFace] Model ready.")
     return _insight_app
