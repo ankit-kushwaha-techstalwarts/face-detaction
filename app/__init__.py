@@ -231,6 +231,46 @@ def _start_background_services(app: Flask) -> None:
         except Exception as exc:
             log.warning("[SyncAgent] Could not start: %s", exc)
 
+        # Start periodic cleanup of old unknown-face records/snapshots
+        try:
+            _start_unknown_face_cleanup(app)
+            log.info("[Cleanup] Unknown-face retention cleanup started.")
+        except Exception as exc:
+            log.warning("[Cleanup] Could not start unknown-face cleanup: %s", exc)
+
+
+def _start_unknown_face_cleanup(app: Flask) -> None:
+    """
+    Background thread: periodically purges unknown_faces rows (and their
+    snapshot images) older than the 'unknown_retention_days' setting, so
+    continuous camera capture doesn't grow the gallery/disk unbounded.
+    """
+    import threading
+    import time
+
+    from app.models import get_setting
+    from app.models.attendance import purge_old_unknown_faces
+
+    CHECK_INTERVAL_SEC = 3600  # hourly check is plenty for day-granularity retention
+
+    def _loop():
+        while True:
+            try:
+                with app.app_context():
+                    days = int(get_setting('unknown_retention_days', '1'))
+                    if days > 0:
+                        deleted = purge_old_unknown_faces(days, app.config['BASE_DIR'])
+                        if deleted:
+                            log.info(
+                                "[Cleanup] Purged %d unknown-face record(s) older than %d day(s).",
+                                deleted, days,
+                            )
+            except Exception as exc:
+                log.warning("[Cleanup] Unknown-face purge failed: %s", exc)
+            time.sleep(CHECK_INTERVAL_SEC)
+
+    threading.Thread(target=_loop, daemon=True, name='unknown-face-cleanup').start()
+
 
 def _register_teardown(app: Flask) -> None:
     """Register graceful shutdown: stop camera threads and sync agent."""

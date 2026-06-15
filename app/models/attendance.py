@@ -261,6 +261,28 @@ def bulk_delete_unknown(ids: list, base_dir: str) -> int:
     return deleted
 
 
+def purge_old_unknown_faces(days: int, base_dir: str) -> int:
+    """
+    Delete unknown_faces rows (and their snapshot files) detected more than
+    `days` days ago. Used by the periodic retention cleanup so storage doesn't
+    grow unbounded from continuous camera capture.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    with get_db() as conn:
+        rows = conn.execute(
+            f'SELECT id, snapshot_path FROM unknown_faces WHERE detected_at < {PH}',
+            (cutoff,),
+        ).fetchall()
+        for row in rows:
+            if row['snapshot_path']:
+                _safe_remove(os.path.join(base_dir, row['snapshot_path']))
+        if rows:
+            ids = [r['id'] for r in rows]
+            placeholders = ','.join([PH] * len(ids))
+            conn.execute(f'DELETE FROM unknown_faces WHERE id IN ({placeholders})', ids)
+    return len(rows)
+
+
 def unsynced_counts() -> dict:
     """Return count of records not yet pushed to the cloud portal."""
     with get_db() as conn:

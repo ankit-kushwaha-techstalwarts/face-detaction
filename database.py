@@ -226,6 +226,7 @@ def init_db():
         ('unknown_save',          '1',    'Save Unknown Face Records',              'recognition'),
         ('unknown_debounce',      '300',  'Unknown Face Cooldown (seconds)',        'recognition'),
         ('unknown_sim_threshold', '0.40', 'Unknown Face Similarity Threshold (0–1)','recognition'),
+        ('unknown_retention_days','1',    'Unknown Face Retention (days, 0=keep forever)', 'recognition'),
         ('auto_out',        '1',                         'Auto Punch-OUT at Day End', 'attendance'),
         ('timezone',        'Asia/Kolkata',               'Timezone',                  'general'),
         # ── Compliance ──────────────────────────────────────────────
