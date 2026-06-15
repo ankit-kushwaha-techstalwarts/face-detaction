@@ -43,6 +43,6 @@ IF %ERRORLEVEL% EQU 0 (
   python -c "from app import create_app; from waitress import serve; import ssl; ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain('cert.pem','key.pem'); serve(create_app(), host='0.0.0.0', port=5443, threads=16, _quiet=True)"
 ) ELSE (
   echo [*] Waitress not found -- using Flask dev server
-  python app.py
+  python run.py
 )
 pause

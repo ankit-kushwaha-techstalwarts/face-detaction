@@ -73,5 +73,5 @@ if python -c "import gunicorn" 2>/dev/null; then
     "app:create_app()"
 else
   echo "[*] gunicorn not found — falling back to waitress/Flask dev server"
-  python app.py
+  python run.py
 fi
