@@ -210,6 +210,7 @@ def init_db():
         ('min_pw_length',   '8',    'Minimum Password Length',                          'compliance'),
         ('require_strong_pw','1',   'Enforce Strong Password',                         'compliance'),
         ('max_login_attempts','5',  'Max Failed Login Attempts',                        'compliance'),
+        ('cors_allowed_origins', '', 'CORS Allowed Origins (comma-separated, e.g. http://localhost:5174; restart required)', 'compliance'),
         ('sync_api_key',    '',     'Sync API Key (set same on all local sites)',        'sync'),
     ]
     for row in default_settings:

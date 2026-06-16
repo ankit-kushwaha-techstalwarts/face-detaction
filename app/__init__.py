@@ -78,9 +78,10 @@ def create_app(config_class=None):
     # ── Initialise database schema ────────────────────────────────────────────
     _bootstrap_database(app)
 
-    # ── Register middleware (security headers + auth guard) ───────────────────
-    from app.middleware import register_security_headers, register_auth_guard
+    # ── Register middleware (security headers + CORS + auth guard) ────────────
+    from app.middleware import register_security_headers, register_cors, register_auth_guard
     register_security_headers(app)
+    register_cors(app)
     register_auth_guard(app)
 
     # ── Register blueprints ───────────────────────────────────────────────────
@@ -197,6 +198,12 @@ def _bootstrap_database(app: Flask) -> None:
             app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=timeout_mins)
     except Exception:
         pass
+
+    # If CORS is configured for a cross-origin frontend, the session cookie
+    # must use SameSite=None (requires Secure, i.e. HTTPS) so the browser
+    # will send it on cross-site XHR/fetch requests with credentials.
+    if get_setting('cors_allowed_origins', '').strip():
+        app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
 
 def _start_background_services(app: Flask) -> None:

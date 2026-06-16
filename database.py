@@ -236,6 +236,7 @@ def init_db():
         ('min_pw_length',   '8',    'Minimum Password Length',                      'compliance'),
         ('require_strong_pw','1',   'Enforce Strong Password (1=yes)',              'compliance'),
         ('max_login_attempts','5',  'Max Failed Login Attempts (0=unlimited)',       'compliance'),
+        ('cors_allowed_origins', '', 'CORS Allowed Origins (comma-separated, e.g. http://localhost:5174; restart required)', 'compliance'),
         # ── Cloud Sync ──────────────────────────────────────────────
         ('cloud_api_url',    '',    'Cloud Portal URL (e.g. https://portal.example.com)', 'sync'),
         ('cloud_api_key',    '',    'Cloud API Key (shared secret)',                       'sync'),

@@ -28,6 +28,14 @@ log = logging.getLogger('faceattend.routes.users')
 users_bp = Blueprint('users', __name__)
 
 
+def _with_photo_url(user: dict) -> dict:
+    """Add an absolute 'photo_url' built from the relative 'photo_path',
+    so cross-origin frontends can use it directly as an <img src>."""
+    photo_path = user.get('photo_path')
+    user['photo_url'] = f"{request.host_url.rstrip('/')}/{photo_path}" if photo_path else None
+    return user
+
+
 @users_bp.route('/api/users', methods=['GET'])
 @login_required
 def list_users():
@@ -42,6 +50,7 @@ def list_users():
         page     = page,
         per_page = per_page,
     )
+    result['users'] = [_with_photo_url(u) for u in result['users']]
     return ok(result)
 
 
@@ -51,7 +60,7 @@ def get_user(uid):
     user = user_dao.get_user(uid)
     if not user:
         return err('User not found', 404)
-    return ok(user)
+    return ok(_with_photo_url(user))
 
 
 @users_bp.route('/api/users', methods=['POST'])

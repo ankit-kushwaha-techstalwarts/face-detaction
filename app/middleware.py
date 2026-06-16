@@ -89,6 +89,41 @@ def register_security_headers(app: Flask) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 1b. Cross-Origin Resource Sharing (for separately-hosted frontends)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def register_cors(app: Flask) -> None:
+    """
+    Attach Access-Control-* headers for cross-origin API clients (e.g. a
+    React/Vite dev server on a different host/port).
+
+    Allowed origins come from the 'cors_allowed_origins' setting — a
+    comma-separated list of exact origins (scheme + host + port), read
+    fresh on every request. Empty (the default) disables CORS entirely,
+    leaving same-origin behaviour unchanged.
+    """
+    from app.models import get_setting
+
+    @app.after_request
+    def _add_cors_headers(response):
+        origin = request.headers.get('Origin')
+        if not origin:
+            return response
+
+        allowed = {
+            o.strip() for o in get_setting('cors_allowed_origins', '').split(',') if o.strip()
+        }
+        if origin in allowed:
+            response.headers['Access-Control-Allow-Origin']      = origin
+            response.headers['Access-Control-Allow-Credentials']  = 'true'
+            response.headers['Access-Control-Allow-Methods']      = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers']      = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age']            = '600'
+            response.headers['Vary'] = 'Origin'
+        return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2. Authentication Guard (global before_request)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -102,6 +137,10 @@ def register_auth_guard(app: Flask) -> None:
 
     @app.before_request
     def _auth_guard():
+        # ── CORS preflight always passes through untouched ────────────────────
+        if request.method == 'OPTIONS':
+            return None
+
         path = request.path
 
         # ── Static assets and public paths are always open ────────────────────
