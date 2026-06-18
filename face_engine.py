@@ -153,46 +153,47 @@ def _face_sharpness(img_bgr: np.ndarray, bbox) -> float:
 
 def encode_face_detailed(image_path: str):
     """
-    Return (embedding, None) on success or (None, reason) on failure.
+    Return (embedding, det_score, sharpness, None) on success
+    or (None, 0.0, 0.0, reason) on failure.
     Applies quality gates so weak reference photos are rejected with a
     human-readable explanation instead of silently degrading recognition.
     """
     if not FACE_LIB_AVAILABLE:
-        return None, 'Face library not installed on this server'
+        return None, 0.0, 0.0, 'Face library not installed on this server'
     img = cv2.imread(image_path)
     if img is None:
         log.error(f"Cannot read image: {image_path}")
-        return None, 'Image file could not be read'
+        return None, 0.0, 0.0, 'Image file could not be read'
     try:
         app   = get_insight_app()
         faces = app.get(img)
     except Exception as e:
         log.error(f"InsightFace error: {e}")
-        return None, 'Face engine error — check server logs'
+        return None, 0.0, 0.0, 'Face engine error — check server logs'
     if not faces:
-        return None, 'No face detected — use a clear, well-lit frontal photo'
+        return None, 0.0, 0.0, 'No face detected — use a clear, well-lit frontal photo'
 
     # Pick the largest face if multiple detected
     face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
 
     side = min(face.bbox[2] - face.bbox[0], face.bbox[3] - face.bbox[1])
     if side < ENROLL_MIN_FACE_PX:
-        return None, (f'Face too small ({int(side)}px) — move closer to the '
-                      f'camera or use a higher-resolution photo')
-    score = float(getattr(face, 'det_score', 1.0))
-    if score < ENROLL_MIN_DET_SCORE:
-        return None, ('Face unclear (low detection confidence) — use a '
-                      'frontal photo without occlusion')
+        return None, 0.0, 0.0, (f'Face too small ({int(side)}px) — move closer to the '
+                                 f'camera or use a higher-resolution photo')
+    det_score = float(getattr(face, 'det_score', 1.0))
+    if det_score < ENROLL_MIN_DET_SCORE:
+        return None, 0.0, 0.0, ('Face unclear (low detection confidence) — use a '
+                                 'frontal photo without occlusion')
     sharpness = _face_sharpness(img, face.bbox)
     if sharpness < ENROLL_MIN_SHARPNESS:
-        return None, 'Photo is too blurry — retake without motion blur'
+        return None, 0.0, 0.0, 'Photo is too blurry — retake without motion blur'
 
-    return face.embedding.astype(np.float32), None
+    return face.embedding.astype(np.float32), det_score, sharpness, None
 
 
 def encode_face_from_image(image_path: str):
     """Return 512-d face embedding from image file, or None if no usable face."""
-    enc, reason = encode_face_detailed(image_path)
+    enc, _, _, reason = encode_face_detailed(image_path)
     if enc is None and reason:
         log.info(f"Enrolment rejected for {image_path}: {reason}")
     return enc
@@ -277,21 +278,27 @@ class FaceCache:
     """
 
     def __init__(self):
-        self._lock     = threading.Lock()
-        self._user_ids = []   # row -> user_id (users repeat, one row per template)
-        self._names    = []   # row -> user name
+        self._lock         = threading.Lock()
+        self._user_ids     = []
+        self._names        = []
         # Pre-normalised (T, 512) float32 matrix — rebuilt on every reload()
-        self._matrix   = np.empty((0, 512), dtype=np.float32)
+        self._matrix       = np.empty((0, 512), dtype=np.float32)
+        # Per-row quality weight in [0.5, 1.0] — higher = better template
+        self._qualities    = np.empty((0,), dtype=np.float32)
+        # user_id -> list of normalised embeddings (for in-memory diversity checks)
+        self._encs_by_user: dict = {}
 
     def reload(self):
         conn = get_db()
-        rows = conn.execute(
+        anchor_rows = conn.execute(
             'SELECT id AS user_id, name, face_encoding AS embedding '
             'FROM users WHERE active=1 AND face_encoding IS NOT NULL'
         ).fetchall()
         try:
             template_rows = conn.execute(
-                'SELECT ft.user_id AS user_id, u.name AS name, ft.embedding AS embedding '
+                'SELECT ft.user_id, u.name, ft.embedding, '
+                '       COALESCE(ft.det_score, 1.0) AS det_score, '
+                '       COALESCE(ft.sharpness,  1.0) AS sharpness '
                 'FROM face_templates ft JOIN users u ON u.id = ft.user_id '
                 'WHERE u.active = 1'
             ).fetchall()
@@ -300,32 +307,62 @@ class FaceCache:
             template_rows = []
         conn.close()
 
-        ids, names, encs = [], [], []
-        for row in list(rows) + list(template_rows):
+        ids, names, encs, quals = [], [], [], []
+        encs_by_user: dict = {}
+
+        for row in anchor_rows:
             try:
                 enc  = blob_to_encoding(row['embedding'])
                 norm = np.linalg.norm(enc)
                 if norm == 0:
                     continue
-                encs.append(enc / norm)          # pre-normalise once at load time
+                nenc = enc / norm
+                encs.append(nenc)
                 ids.append(row['user_id'])
                 names.append(row['name'])
+                quals.append(1.0)   # anchor always full weight
+                encs_by_user.setdefault(row['user_id'], []).append(nenc)
             except Exception as e:
-                log.warning(f"Bad encoding for user {row['user_id']}: {e}")
+                log.warning(f"Bad anchor encoding for user {row['user_id']}: {e}")
 
-        matrix = (np.array(encs, dtype=np.float32)
-                  if encs else np.empty((0, 512), dtype=np.float32))
+        for row in template_rows:
+            try:
+                enc  = blob_to_encoding(row['embedding'])
+                norm = np.linalg.norm(enc)
+                if norm == 0:
+                    continue
+                nenc = enc / norm
+                # Quality in [0.5, 1.0]: blend of detection confidence and sharpness
+                q = 0.5 + 0.5 * float(row['det_score']) * min(float(row['sharpness']) / 200.0, 1.0)
+                encs.append(nenc)
+                ids.append(row['user_id'])
+                names.append(row['name'])
+                quals.append(q)
+                encs_by_user.setdefault(row['user_id'], []).append(nenc)
+            except Exception as e:
+                log.warning(f"Bad template encoding for user {row['user_id']}: {e}")
+
+        matrix    = (np.array(encs,  dtype=np.float32)
+                     if encs  else np.empty((0, 512), dtype=np.float32))
+        qualities = (np.array(quals, dtype=np.float32)
+                     if quals else np.empty((0,),     dtype=np.float32))
         with self._lock:
-            self._user_ids = ids
-            self._names    = names
-            self._matrix   = matrix
+            self._user_ids     = ids
+            self._names        = names
+            self._matrix       = matrix
+            self._qualities    = qualities
+            self._encs_by_user = encs_by_user
         log.info(f"[FaceCache] Loaded {len(ids)} template(s) for "
                  f"{len(set(ids))} user(s) into (T={len(ids)}, 512) matrix.")
 
     def match(self, unknown_enc: np.ndarray, threshold: float = 0.50):
         """
         Return (user_id, name, confidence_pct) or (None, 'Unknown', 0).
-        Single matrix-vector multiply — O(1) regardless of enrolled user count.
+
+        Groups templates by user and picks the best quality-weighted similarity
+        per user, then compares the winning user's raw similarity to the
+        threshold. This prevents a single high-quality template from one user
+        out-scoring a weaker but correct template from another user.
         """
         with self._lock:
             if self._matrix.shape[0] == 0:
@@ -333,14 +370,33 @@ class FaceCache:
             norm = np.linalg.norm(unknown_enc)
             if norm == 0:
                 return None, 'Unknown', 0.0
-            q          = unknown_enc.astype(np.float32) / norm  # normalise query
-            sims       = self._matrix @ q                       # (N,) — all cosine sims at once
-            best_idx   = int(np.argmax(sims))
-            best_sim   = float(sims[best_idx])
-            confidence = round(best_sim * 100, 2)
-            if best_sim >= threshold:
-                return self._user_ids[best_idx], self._names[best_idx], confidence
+            q    = unknown_enc.astype(np.float32) / norm
+            sims = self._matrix @ q   # (N,) cosine similarities
+
+            # Per-user best: use quality-weighted sim to rank templates,
+            # but keep raw sim for the threshold check.
+            best: dict = {}   # user_id -> {'raw': float, 'weighted': float, 'name': str}
+            for i, uid in enumerate(self._user_ids):
+                w = float(sims[i]) * float(self._qualities[i])
+                if uid not in best or w > best[uid]['weighted']:
+                    best[uid] = {'raw': float(sims[i]), 'weighted': w,
+                                 'name': self._names[i]}
+
+            if not best:
+                return None, 'Unknown', 0.0
+
+            best_uid  = max(best, key=lambda u: best[u]['weighted'])
+            best_raw  = best[best_uid]['raw']
+            best_name = best[best_uid]['name']
+            confidence = round(best_raw * 100, 2)
+            if best_raw >= threshold:
+                return best_uid, best_name, confidence
             return None, 'Unknown', confidence
+
+    def get_user_encodings(self, user_id: int) -> list:
+        """Return normalised embeddings for a user from in-memory cache (no DB)."""
+        with self._lock:
+            return list(self._encs_by_user.get(user_id, []))
 
 
 face_cache = FaceCache()
@@ -351,12 +407,17 @@ face_cache = FaceCache()
 # ─────────────────────────────────────────────────────────────
 
 def add_face_template(user_id: int, enc: np.ndarray, source: str = 'enroll',
-                      camera_id: int = None, reload_cache: bool = True):
+                      camera_id: int = None, reload_cache: bool = True,
+                      photo_path: str = None, det_score: float = 1.0,
+                      sharpness: float = 1.0):
     """Insert one embedding into the user's template gallery."""
     conn = get_db()
     conn.execute(
-        'INSERT INTO face_templates (user_id, embedding, source, camera_id) VALUES (?,?,?,?)',
-        (user_id, encoding_to_blob(enc.astype(np.float32)), source, camera_id)
+        'INSERT INTO face_templates '
+        '(user_id, embedding, source, camera_id, photo_path, det_score, sharpness) '
+        'VALUES (?,?,?,?,?,?,?)',
+        (user_id, encoding_to_blob(enc.astype(np.float32)), source, camera_id,
+         photo_path, det_score, sharpness)
     )
     conn.commit()
     conn.close()
@@ -516,9 +577,9 @@ class CameraWorker(threading.Thread):
                 user_id, name, confidence = face_cache.match(enc, tol)
                 if user_id:
                     detections.append((bbox, f"{name} {confidence:.0f}%", True))
-                    # Require N matches in a short window before punching so a
+                    # Require accumulated confidence score before punching so a
                     # single-frame false match never logs attendance.
-                    if self._confirm_hit(user_id):
+                    if self._confirm_hit(user_id, confidence):
                         # Known face: debounce prevents re-punch AND duplicate snapshot
                         self._log_attendance(user_id, confidence, frame if save_snap else None)
                     self._maybe_auto_learn(user_id, enc, confidence / 100.0,
@@ -563,11 +624,13 @@ class CameraWorker(threading.Thread):
             log.error(f"[Camera {self.camera_id}] Capture open error: {e}")
         return None
 
-    def _confirm_hit(self, user_id: int) -> bool:
+    def _confirm_hit(self, user_id: int, confidence: float) -> bool:
         """
-        True once the same user has matched in 'match_consecutive' detection
-        cycles within HIT_WINDOW_SEC of each other. A streak that goes stale
-        restarts at 1, so a one-off false match on a passer-by never punches.
+        True once accumulated confidence score crosses the punch threshold.
+        Each match contributes (confidence / 100) to the streak score.
+        Threshold is (need - 0.5) so two solid 80%+ matches satisfy need=2
+        while borderline matches require an extra frame.
+        Stale streaks reset so a lone false positive never punches.
         """
         need = int(get_setting('match_consecutive', '2'))
         if need <= 1:
@@ -575,12 +638,12 @@ class CameraWorker(threading.Thread):
         now    = time.time()
         streak = self._hit_streak.get(user_id)
         if streak is None or now - streak['last'] > self.HIT_WINDOW_SEC:
-            streak = {'count': 0, 'last': now}
-        streak['count'] += 1
+            streak = {'score': 0.0, 'last': now}
+        streak['score'] += confidence / 100.0
         streak['last']   = now
         self._hit_streak[user_id] = streak
-        if streak['count'] >= need:
-            self._hit_streak.pop(user_id, None)   # reset so next punch needs a fresh streak
+        if streak['score'] >= need - 0.5:
+            self._hit_streak.pop(user_id, None)
             return True
         return False
 
@@ -614,27 +677,42 @@ class CameraWorker(threading.Thread):
             if _face_sharpness(frame, bbox) < ENROLL_MIN_SHARPNESS:
                 return
 
-            cap = int(get_setting('max_auto_templates', '5'))
+            # In-memory diversity gate — no DB round-trip needed.
+            # Skip if this embedding is too similar to any existing template.
+            norm_new = enc / (np.linalg.norm(enc) or 1)
+            for ex in face_cache.get_user_encodings(user_id):
+                if float(np.dot(norm_new, ex)) > 0.92:
+                    log.debug(f"[Camera {self.camera_id}] Auto-learn skipped "
+                              f"user_id={user_id}: embedding too similar to existing template.")
+                    return
+
+            cap        = int(get_setting('max_auto_templates', '5'))
+            sharpness  = _face_sharpness(frame, bbox)
             conn = get_db()
-            # Rolling window: evict oldest auto-learned templates to stay at cap.
-            # 'enroll'/'merge' templates are operator-provided and never evicted.
+            # Rolling window: evict lowest-quality auto template when at cap
+            # so the gallery improves over time rather than just rotating.
             conn.execute('''
                 DELETE FROM face_templates WHERE id IN (
                     SELECT id FROM face_templates
                     WHERE user_id=? AND source='auto'
-                    ORDER BY id DESC LIMIT -1 OFFSET ?
+                    ORDER BY COALESCE(det_score, 0.0) * COALESCE(sharpness, 0.0) ASC
+                    LIMIT -1 OFFSET ?
                 )
             ''', (user_id, max(cap - 1, 0)))
             conn.execute(
-                'INSERT INTO face_templates (user_id, embedding, source, camera_id) VALUES (?,?,?,?)',
-                (user_id, encoding_to_blob(enc.astype(np.float32)), 'auto', self.camera_id)
+                'INSERT INTO face_templates '
+                '(user_id, embedding, source, camera_id, det_score, sharpness) '
+                'VALUES (?,?,?,?,?,?)',
+                (user_id, encoding_to_blob(enc.astype(np.float32)), 'auto',
+                 self.camera_id, det_score, sharpness)
             )
             conn.commit()
             conn.close()
             self._last_learn[user_id] = now
             face_cache.reload()
             log.info(f"[Camera {self.camera_id}] Auto-learned template for "
-                     f"user_id={user_id} (sim={sim:.2f}, det={det_score:.2f}).")
+                     f"user_id={user_id} (sim={sim:.2f}, det={det_score:.2f}, "
+                     f"sharpness={sharpness:.0f}).")
         except Exception as e:
             log.warning(f"[Camera {self.camera_id}] Auto-learn skipped: {e}")
 
@@ -669,8 +747,10 @@ class CameraWorker(threading.Thread):
         cooldown = float(get_setting('unknown_debounce', str(self.UNKNOWN_COOLDOWN_SEC)))
         sim_thr  = float(get_setting('unknown_sim_threshold', str(self.UNKNOWN_SIM_THRESH)))
 
-        # Drop entries older than the cooldown window
+        # Drop entries older than the cooldown window, then cap length
         self._unknown_buf = [e for e in self._unknown_buf if now - e['ts'] < cooldown]
+        if len(self._unknown_buf) > 200:
+            self._unknown_buf = self._unknown_buf[-200:]
 
         # Compare with every buffered embedding
         for entry in self._unknown_buf:

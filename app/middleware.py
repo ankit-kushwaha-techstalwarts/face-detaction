@@ -20,7 +20,8 @@ OWASP compliance notes
 import logging
 from functools import wraps
 
-from flask import Flask, request, jsonify, session, redirect
+from flask import Flask, request, jsonify
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
 
 log = logging.getLogger('faceattend.middleware')
 
@@ -110,12 +111,17 @@ def register_cors(app: Flask) -> None:
         if not origin:
             return response
 
+        cors_setting = get_setting('cors_allowed_origins', '').strip()
+        if not cors_setting:
+            return response
+
         allowed = {
-            o.strip() for o in get_setting('cors_allowed_origins', '').split(',') if o.strip()
+            o.strip() for o in cors_setting.split(',') if o.strip()
         }
-        if origin in allowed:
-            response.headers['Access-Control-Allow-Origin']      = origin
-            response.headers['Access-Control-Allow-Credentials']  = 'true'
+
+        if '*' in allowed or origin in allowed:
+            response.headers['Access-Control-Allow-Origin']      = origin if '*' not in allowed else '*'
+            response.headers['Access-Control-Allow-Credentials']  = 'true' if '*' not in allowed else 'false'
             response.headers['Access-Control-Allow-Methods']      = 'GET, POST, PUT, DELETE, OPTIONS'
             response.headers['Access-Control-Allow-Headers']      = 'Content-Type, Authorization'
             response.headers['Access-Control-Max-Age']            = '600'
@@ -155,12 +161,15 @@ def register_auth_guard(app: Flask) -> None:
         if any(path.startswith(p) for p in ('/static/', '/uploads/', '/cert.pem')):
             return None
 
-        # ── All remaining /api/ routes require a valid session ────────────────
-        if not session.get('logged_in'):
+        # ── All remaining /api/ routes require a valid JWT token ──────────────
+        try:
+            verify_jwt_in_request()
+        except Exception:
             return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
 
         # ── Guard role enforcement ────────────────────────────────────────────
-        role = session.get('role', 'guard')
+        claims = get_jwt()
+        role = claims.get('role', 'guard')
         if role == 'guard':
             allowed = (
                 request.method == 'GET'
@@ -178,16 +187,13 @@ def register_auth_guard(app: Flask) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def login_required(f):
-    """
-    Decorator: redirect unauthenticated browser requests to /login;
-    return 401 JSON for API requests.
-    """
+    """Decorator: require a valid JWT token in the Authorization header."""
     @wraps(f)
     def _decorated(*args, **kwargs):
-        if not session.get('logged_in'):
-            if request.path.startswith('/api/'):
-                return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
-            return redirect('/login')
+        try:
+            verify_jwt_in_request()
+        except Exception:
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
         return f(*args, **kwargs)
     return _decorated
 
@@ -206,13 +212,17 @@ def role_required(*roles: str):
     def _decorator(f):
         @wraps(f)
         def _decorated(*args, **kwargs):
-            if not session.get('logged_in'):
+            try:
+                verify_jwt_in_request()
+            except Exception:
                 return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
-            user_role = session.get('role', 'guard')
+
+            claims = get_jwt()
+            user_role = claims.get('role', 'guard')
             if user_role not in roles:
                 log.warning(
                     "[RBAC] %s (role=%s) attempted %s — required: %s",
-                    session.get('username'), user_role, request.path, roles,
+                    claims.get('username'), user_role, request.path, roles,
                 )
                 return jsonify({
                     'status': 'error',

@@ -119,6 +119,47 @@ def get_user_photo_path(uid: int) -> Optional[str]:
     return row['photo_path'] if row else None
 
 
+def get_user_photos(uid: int) -> list | None:
+    """Return all photos for a user (main + enroll templates), or None if user not found."""
+    with get_db() as conn:
+        main = conn.execute(
+            f'SELECT photo_path FROM users WHERE id={PH}', (uid,)
+        ).fetchone()
+        if main is None:
+            return None
+        templates = conn.execute(
+            f'SELECT id, photo_path, source, created_at FROM face_templates '
+            f'WHERE user_id={PH} AND photo_path IS NOT NULL ORDER BY created_at',
+            (uid,)
+        ).fetchall()
+
+    photos = []
+    if main['photo_path']:
+        photos.append({
+            'id': None,
+            'type': 'main',
+            'photo_path': main['photo_path'],
+        })
+    for row in templates:
+        photos.append({
+            'id': row['id'],
+            'type': row['source'],
+            'photo_path': row['photo_path'],
+            'created_at': row['created_at'],
+        })
+    return photos
+
+
+def count_enroll_templates(uid: int) -> int:
+    """Return how many enroll-source templates exist for a user."""
+    with get_db() as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM face_templates WHERE user_id={PH} AND source='enroll'",
+            (uid,)
+        ).fetchone()
+    return row['n'] if row else 0
+
+
 def get_active_users(dept: Optional[str] = None) -> list:
     """Return all active users (used in absentee report)."""
     sql  = 'SELECT id, emp_id, name, department, designation FROM users WHERE active=1'

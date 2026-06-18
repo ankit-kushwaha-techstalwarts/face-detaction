@@ -8,6 +8,7 @@ GET    /api/users/<uid>             — Single employee
 POST   /api/users                   — Create employee
 PUT    /api/users/<uid>             — Update employee
 DELETE /api/users/<uid>             — Soft-delete (deactivate)
+GET    /api/users/<uid>/photos      — All photos for a user
 POST   /api/users/<uid>/photo       — Upload face photo
 POST   /api/users/<uid>/enroll      — Enrol face encoding
 POST   /api/users/import            — Bulk CSV import
@@ -16,6 +17,8 @@ POST   /api/users/import            — Bulk CSV import
 import logging
 import os
 from datetime import datetime
+
+import numpy as np
 
 from flask import Blueprint, request, current_app
 from werkzeug.utils import secure_filename
@@ -100,7 +103,23 @@ def delete_user(uid):
     return ok(msg='User deactivated')
 
 
-# ── Photo upload ───────────────────────────────────────────────────────────────
+# ── Photos ────────────────────────────────────────────────────────────────────
+
+MAX_ENROLL_PHOTOS = 5
+
+@users_bp.route('/api/users/<int:uid>/photos', methods=['GET'])
+@role_required('admin', 'manager')
+def get_user_photos(uid):
+    """Return all photos for a user (main + enrollment snapshots)."""
+    photos = user_dao.get_user_photos(uid)
+    if photos is None:
+        return err('User not found', 404)
+    host = request.host_url.rstrip('/')
+    for p in photos:
+        path = p.get('photo_path')
+        p['photo_url'] = f"{host}/{path}" if path else None
+    return ok({'photos': photos, 'total': len(photos), 'max': MAX_ENROLL_PHOTOS})
+
 
 @users_bp.route('/api/users/<int:uid>/photo', methods=['POST'])
 @role_required('admin', 'manager')
@@ -145,13 +164,40 @@ def enroll_face(uid):
     if mode not in ('replace', 'append'):
         return err("mode must be 'replace' or 'append'")
 
+    # ── Collect uploaded files ────────────────────────────────────────────────
+    saved_paths = []   # track files written to disk so we can clean up on failure
     paths = []
     if 'photo' in request.files:
+        files = request.files.getlist('photo')
+        if len(files) > MAX_ENROLL_PHOTOS:
+            return err(f'Maximum {MAX_ENROLL_PHOTOS} photos allowed per enrolment')
+
+        # In append mode, check how many slots remain before touching the disk
+        if mode == 'append':
+            row = user_dao.get_user_with_encoding(uid)
+            if not (row and row.get('face_encoding')):
+                mode = 'replace'
+            else:
+                existing = user_dao.count_enroll_templates(uid)
+                # anchor occupies 1 slot; enroll templates fill the rest
+                slots = (MAX_ENROLL_PHOTOS - 1) - existing
+                if slots <= 0:
+                    return err(
+                        f'Maximum {MAX_ENROLL_PHOTOS} photos already enrolled. '
+                        f'Delete some enroll templates first.'
+                    )
+                if len(files) > slots:
+                    return err(
+                        f'Only {slots} slot(s) remaining (max {MAX_ENROLL_PHOTOS} total). '
+                        f'Send at most {slots} photo(s).'
+                    )
+
         ts = int(datetime.now().timestamp())
-        for i, f in enumerate(request.files.getlist('photo')):
+        for i, f in enumerate(files):
             fname = secure_filename(f'enroll_{uid}_{ts}_{i}.jpg')
             path  = os.path.join(face_dir, fname)
             f.save(path)
+            saved_paths.append(path)
             paths.append(path)
     else:
         photo_path = user_dao.get_user_photo_path(uid)
@@ -159,35 +205,58 @@ def enroll_face(uid):
             return err('No photo available for enrolment — upload a photo first')
         paths.append(os.path.join(base_dir, photo_path))
 
+    # ── Encode faces ─────────────────────────────────────────────────────────
     accepted, rejected = [], []
     for path in paths:
-        enc, reason = current_app.encode_face_detailed(path)
+        enc, det_score, sharpness, reason = current_app.encode_face_detailed(path)
         if enc is None:
             rejected.append(f"{os.path.basename(path)}: {reason}")
-        else:
-            accepted.append((path, enc))
+            continue
+        # Reject if too similar to an already-accepted photo in this batch —
+        # forces the wizard to collect genuinely different angles.
+        duplicate = False
+        for _, prev_enc, _, _ in accepted:
+            sim = float(
+                np.dot(enc / (np.linalg.norm(enc) or 1),
+                       prev_enc / (np.linalg.norm(prev_enc) or 1))
+            )
+            if sim > 0.92:
+                rejected.append(
+                    f"{os.path.basename(path)}: too similar to another photo "
+                    f"in this batch ({sim:.0%}) — use a different angle"
+                )
+                duplicate = True
+                break
+        if not duplicate:
+            accepted.append((path, enc, det_score, sharpness))
 
     if not accepted:
+        # Clean up files we saved before failing
+        for p in saved_paths:
+            try: os.remove(p)
+            except OSError: pass
         return err(rejected[0] if len(rejected) == 1
                    else 'All photos rejected — ' + ' | '.join(rejected))
 
+    # mode may have been promoted from append→replace above
     if mode == 'append':
-        row = user_dao.get_user_with_encoding(uid)
-        if not (row and row.get('face_encoding')):
-            mode = 'replace'   # nothing to append to — establish a baseline
-
-    if mode == 'append':
-        for _, extra_enc in accepted:
-            current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
+        for path, extra_enc, det_score, sharpness in accepted:
+            rel = os.path.relpath(path, base_dir)
+            current_app.add_face_template(uid, extra_enc, source='enroll',
+                                          reload_cache=False, photo_path=rel,
+                                          det_score=det_score, sharpness=sharpness)
         msg = f'Added {len(accepted)} photo(s) to face profile'
     else:
-        anchor_path, anchor_enc = accepted[0]
+        anchor_path, anchor_enc, _, _ = accepted[0]
         rel = os.path.relpath(anchor_path, base_dir)
         user_dao.update_user_encoding(uid, current_app.encoding_to_blob(anchor_enc), rel)
         # Re-enrolment resets the gallery (including auto-learned templates)
         current_app.clear_face_templates(uid)
-        for _, extra_enc in accepted[1:]:
-            current_app.add_face_template(uid, extra_enc, source='enroll', reload_cache=False)
+        for path, extra_enc, det_score, sharpness in accepted[1:]:
+            extra_rel = os.path.relpath(path, base_dir)
+            current_app.add_face_template(uid, extra_enc, source='enroll',
+                                          reload_cache=False, photo_path=extra_rel,
+                                          det_score=det_score, sharpness=sharpness)
         msg = f'Face enrolled with {len(accepted)} photo(s)'
     current_app.face_cache.reload()
     audit('ENROLL_FACE', str(uid), f"mode={mode} {len(accepted)} photo(s)")

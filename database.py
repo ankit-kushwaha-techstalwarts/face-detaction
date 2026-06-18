@@ -164,6 +164,9 @@ def init_db():
             embedding   BLOB NOT NULL,
             source      TEXT CHECK(source IN ('enroll','merge','auto')) DEFAULT 'enroll',
             camera_id   INTEGER,
+            photo_path  TEXT,
+            det_score   REAL DEFAULT 1.0,
+            sharpness   REAL DEFAULT 1.0,
             created_at  TEXT DEFAULT (datetime('now','localtime'))
         )
     ''')
@@ -191,6 +194,15 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_audit_created
             ON audit_log(created_at, username)
     ''')
+
+    # Migrate existing face_templates rows: add columns if missing
+    existing = [r[1] for r in cursor.execute('PRAGMA table_info(face_templates)').fetchall()]
+    if 'photo_path' not in existing:
+        cursor.execute('ALTER TABLE face_templates ADD COLUMN photo_path TEXT')
+    if 'det_score' not in existing:
+        cursor.execute('ALTER TABLE face_templates ADD COLUMN det_score REAL DEFAULT 1.0')
+    if 'sharpness' not in existing:
+        cursor.execute('ALTER TABLE face_templates ADD COLUMN sharpness REAL DEFAULT 1.0')
 
     # Index for holiday date lookups
     cursor.execute('''

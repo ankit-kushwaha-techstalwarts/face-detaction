@@ -3,20 +3,17 @@ app/routes/auth.py — Authentication Blueprint
 =============================================
 Endpoints
 ---------
-GET  /login                  — Serve login HTML page
+GET  /                       — API status
 POST /api/auth/login         — Authenticate and create session
 POST /api/auth/logout        — Destroy session
 GET  /api/auth/me            — Return current user info
 POST /api/auth/change-password — Change own password
-GET  /                       — Serve single-page app (requires login)
 """
 
 import logging
 
-from flask import (
-    Blueprint, request, session, redirect,
-    send_from_directory, current_app,
-)
+from flask import Blueprint, request
+from flask_jwt_extended import create_access_token
 
 from app.models import ok, err, audit, hash_password, validate_password
 from app.models.settings import (
@@ -26,26 +23,17 @@ from app.models.settings import (
     verify_sync_key,
 )
 from app.middleware import login_required
+from flask_jwt_extended import get_jwt
 
 log = logging.getLogger('faceattend.routes.auth')
 auth_bp = Blueprint('auth', __name__)
 
 
-# ── Login page & SPA ──────────────────────────────────────────────────────────
-
-@auth_bp.route('/login', methods=['GET'])
-def login_page():
-    if session.get('logged_in'):
-        return redirect('/')
-    import os
-    tmpl = os.path.join(current_app.template_folder, 'login.html')
-    return send_from_directory(current_app.template_folder, 'login.html')
-
+# ── API Status ───────────────────────────────────────────────────────────────
 
 @auth_bp.route('/')
-@login_required
-def index():
-    return send_from_directory(current_app.template_folder, 'index.html')
+def api_status():
+    return {'status': 'FaceAttend API', 'version': '1.0'}
 
 
 # ── Auth API ──────────────────────────────────────────────────────────────────
@@ -66,18 +54,25 @@ def do_login():
         role      = user_row['role']
         full_name = user_row['full_name'] or username
 
-        session['logged_in'] = True
-        session['username']  = username
-        session['role']      = role
-        session['full_name'] = full_name
-        session.permanent    = True
+        access_token = create_access_token(
+            identity=username,
+            additional_claims={
+                'username': username,
+                'role': role,
+                'full_name': full_name,
+            }
+        )
 
         audit('LOGIN', username, f'Role: {role}')
         log.info("[Auth] Login: %s (%s) from %s", username, role, request.remote_addr)
-        return ok({'username': username, 'role': role, 'full_name': full_name}, 'Login successful')
+        return ok({
+            'username': username,
+            'role': role,
+            'full_name': full_name,
+            'access_token': access_token,
+        }, 'Login successful')
 
-    # Failed login — write audit record without calling audit() to avoid
-    # using session.get (session is not yet valid)
+    # Failed login — write audit record
     try:
         from app.models import get_db, PH
         with get_db() as conn:
@@ -95,29 +90,33 @@ def do_login():
 
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
+@login_required
 def do_logout():
-    audit('LOGOUT', session.get('username', ''))
-    session.clear()
+    claims = get_jwt()
+    username = claims.get('username', '')
+    audit('LOGOUT', username)
     return ok(msg='Logged out')
 
 
 @auth_bp.route('/api/auth/me', methods=['GET'])
 @login_required
 def auth_me():
+    claims = get_jwt()
     return ok({
-        'username':  session.get('username', ''),
-        'role':      session.get('role', ''),
-        'full_name': session.get('full_name', ''),
+        'username':  claims.get('username', ''),
+        'role':      claims.get('role', ''),
+        'full_name': claims.get('full_name', ''),
     })
 
 
 @auth_bp.route('/api/auth/change-password', methods=['POST'])
 @login_required
 def change_password():
+    claims   = get_jwt()
+    username = claims.get('username', '')
     data     = request.get_json() or {}
     current  = data.get('current_password', '')
     new_pw   = data.get('new_password', '')
-    username = session.get('username', '')
 
     # Verify current password
     user_row = get_admin_user_by_username(username)

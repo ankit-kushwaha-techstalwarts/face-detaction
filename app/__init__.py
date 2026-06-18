@@ -11,6 +11,7 @@ import logging
 import os
 
 from flask import Flask, jsonify
+from flask_jwt_extended import JWTManager
 
 log = logging.getLogger('faceattend')
 
@@ -54,13 +55,16 @@ def create_app(config_class=None):
         config_class = ProductionConfig
 
     # ── Core app object ───────────────────────────────────────────────────────
-    # Templates and statics live one level above app/ (i.e. in face_attendance/)
     app = Flask(
         __name__,
-        template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'),
         static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'),
     )
     app.config.from_object(config_class)
+
+    # ── JWT Configuration ─────────────────────────────────────────────────────
+    app.config['JWT_SECRET_KEY'] = app.config.get('SECRET_KEY', 'change-me-in-production')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False
+    jwt = JWTManager(app)
 
     # ── Logging ───────────────────────────────────────────────────────────────
     logging.basicConfig(
@@ -130,7 +134,7 @@ def _attach_face_engine(app: Flask) -> None:
         app.camera_manager  = _FakeCameraManager()
         app.gen_mjpeg       = _stub_gen_mjpeg
         app.encode_face     = lambda path: None
-        app.encode_face_detailed = lambda path: (None, 'Face engine unavailable in cloud mode')
+        app.encode_face_detailed = lambda path: (None, 0.0, 0.0, 'Face engine unavailable in cloud mode')
         app.encoding_to_blob = lambda enc: None
         app.blob_to_encoding = lambda blob: None
         app.add_face_template    = lambda *a, **k: None
@@ -169,7 +173,7 @@ def _attach_face_engine(app: Flask) -> None:
         app.camera_manager   = _FakeCameraManager()
         app.gen_mjpeg        = _stub_gen_mjpeg
         app.encode_face      = lambda path: None
-        app.encode_face_detailed = lambda path: (None, 'Face engine not available')
+        app.encode_face_detailed = lambda path: (None, 0.0, 0.0, 'Face engine not available')
         app.add_face_template    = lambda *a, **k: None
         app.clear_face_templates = lambda *a, **k: 0
         app.get_template_stats   = lambda uid: {}

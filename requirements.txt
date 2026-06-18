@@ -10,6 +10,7 @@ numpy>=1.24.0
 werkzeug>=2.3.0
 Pillow>=10.0.0
 cryptography>=41.0.0
+Flask-JWT-Extended>=4.5.0
 
 # ── Production WSGI servers (500+ users) ─────────────────────
 # waitress: cross-platform (Windows + Linux + Mac)
