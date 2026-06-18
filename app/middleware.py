@@ -63,6 +63,8 @@ def register_security_headers(app: Flask) -> None:
     def _add_security_headers(response):
         # Content-Security-Policy — only allow resources from self and data URIs.
         # blob: is required for the MJPEG camera streams.
+        # Note: img-src 'self' allows same-origin images; remote frontends (Vercel)
+        # will have their own CSP, so this header doesn't restrict their image loads.
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "   # inline JS in single-page template
