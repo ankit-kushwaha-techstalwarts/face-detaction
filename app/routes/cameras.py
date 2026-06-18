@@ -99,7 +99,6 @@ def stop_camera(cid):
 
 
 @cameras_bp.route('/video_feed/<int:cid>')
-@login_required
 def video_feed(cid):
     if current_app.config.get('CLOUD_MODE'):
         return err('Camera streaming is not available in cloud mode', 503)
@@ -119,7 +118,6 @@ def static_files(path):
 
 
 @cameras_bp.route('/uploads/<path:path>')
-@login_required
 def uploaded_files(path):
     return send_from_directory(
         os.path.join(current_app.config['BASE_DIR'], 'uploads'), path

@@ -97,34 +97,17 @@ def register_cors(app: Flask) -> None:
     """
     Attach Access-Control-* headers for cross-origin API clients (e.g. a
     React/Vite dev server on a different host/port).
-
-    Allowed origins come from the 'cors_allowed_origins' setting — a
-    comma-separated list of exact origins (scheme + host + port), read
-    fresh on every request. Empty (the default) disables CORS entirely,
-    leaving same-origin behaviour unchanged.
+    Unconditionally allows all cross-origin requests to prevent any CORS block.
     """
-    from app.models import get_setting
-
     @app.after_request
     def _add_cors_headers(response):
         origin = request.headers.get('Origin')
-        if not origin:
-            return response
-
-        cors_setting = get_setting('cors_allowed_origins', '').strip()
-        if not cors_setting:
-            return response
-
-        allowed = {
-            o.strip() for o in cors_setting.split(',') if o.strip()
-        }
-
-        if '*' in allowed or origin in allowed:
-            response.headers['Access-Control-Allow-Origin']      = origin if '*' not in allowed else '*'
-            response.headers['Access-Control-Allow-Credentials']  = 'true' if '*' not in allowed else 'false'
-            response.headers['Access-Control-Allow-Methods']      = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers']      = 'Content-Type, Authorization'
-            response.headers['Access-Control-Max-Age']            = '600'
+        if origin:
+            response.headers['Access-Control-Allow-Origin']      = origin
+            response.headers['Access-Control-Allow-Credentials']  = 'true'
+            response.headers['Access-Control-Allow-Methods']      = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers']      = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response.headers['Access-Control-Max-Age']            = '3600'
             response.headers['Vary'] = 'Origin'
         return response
 
@@ -140,6 +123,14 @@ def register_auth_guard(app: Flask) -> None:
     - Guard role is restricted to a small allowlist of GET endpoints.
     - All other roles pass freely once authenticated.
     """
+
+    @app.before_request
+    def _inject_token_from_query():
+        # Support cross-origin media tags (<img>, <video>) that cannot send
+        # custom headers by reading the token from query parameters (jwt or token).
+        token = request.args.get('jwt') or request.args.get('token')
+        if token and 'Authorization' not in request.headers:
+            request.environ['HTTP_AUTHORIZATION'] = f'Bearer {token}'
 
     @app.before_request
     def _auth_guard():
