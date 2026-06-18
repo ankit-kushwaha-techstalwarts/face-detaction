@@ -119,9 +119,21 @@ def static_files(path):
 
 @cameras_bp.route('/uploads/<path:path>')
 def uploaded_files(path):
-    return send_from_directory(
-        os.path.join(current_app.config['BASE_DIR'], 'uploads'), path
-    )
+    upload_dir = os.path.join(current_app.config['BASE_DIR'], 'uploads')
+    full_path = os.path.join(upload_dir, path)
+
+    # Security: prevent directory traversal
+    if not os.path.abspath(full_path).startswith(os.path.abspath(upload_dir)):
+        # For cross-origin requests, return proper MIME type to prevent ORB blocking
+        response = Response('File not found', status=404, mimetype='image/jpeg')
+        return response
+
+    if not os.path.exists(full_path):
+        # For cross-origin requests, return proper MIME type to prevent ORB blocking
+        response = Response('File not found', status=404, mimetype='image/jpeg')
+        return response
+
+    return send_from_directory(upload_dir, path)
 
 
 @cameras_bp.route('/cert.pem')

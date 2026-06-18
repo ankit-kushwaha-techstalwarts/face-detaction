@@ -98,6 +98,7 @@ def register_cors(app: Flask) -> None:
     Attach Access-Control-* headers for cross-origin API clients (e.g. a
     React/Vite dev server on a different host/port).
     Unconditionally allows all cross-origin requests to prevent any CORS block.
+    Also ensures proper MIME type is returned for image/file requests to prevent ORB blocking.
     """
     @app.after_request
     def _add_cors_headers(response):
@@ -109,6 +110,18 @@ def register_cors(app: Flask) -> None:
             response.headers['Access-Control-Allow-Headers']      = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
             response.headers['Access-Control-Max-Age']            = '3600'
             response.headers['Vary'] = 'Origin'
+
+            # For file/image requests that fail, ensure proper content-type is set
+            # to prevent Opaque Response Blocking (ORB) errors in the browser
+            path = request.path.lower()
+            if path.startswith('/uploads/') and response.status_code >= 400:
+                # Infer MIME type from request path for proper ORB handling
+                if path.endswith(('.jpg', '.jpeg')):
+                    response.headers['Content-Type'] = 'image/jpeg'
+                elif path.endswith(('.png',)):
+                    response.headers['Content-Type'] = 'image/png'
+                elif path.endswith(('.gif',)):
+                    response.headers['Content-Type'] = 'image/gif'
         return response
 
 
