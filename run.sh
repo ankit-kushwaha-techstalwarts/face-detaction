@@ -58,10 +58,10 @@ if python -c "import gunicorn" 2>/dev/null; then
   # Camera workers (RTSP threads + ONNX inference) run inside the app process.
   # Multiple gunicorn workers would each start their own camera worker pool,
   # multiplying CPU usage by worker count.  Use 1 worker + many threads instead.
-  echo "[*] Using gunicorn (1 worker, 8 threads) — camera-safe mode"
+  echo "[*] Using gunicorn (1 worker, 32 threads) — camera-safe mode"
   exec gunicorn \
     --workers 1 \
-    --threads 8 \
+    --threads 32 \
     --worker-class gthread \
     --bind "0.0.0.0:5443" \
     --certfile cert.pem \

@@ -515,6 +515,12 @@ class CameraWorker(threading.Thread):
         return self._connected and self._frame is not None
 
     def stop(self):
+        # Calling cap.release() from here (a different thread than the one
+        # blocked in cap.read()) is not safe — OpenCV's FFmpeg backend isn't
+        # reentrant across threads and it can segfault the whole process.
+        # Instead _open_capture() bounds cap.read()/open with a timeout so
+        # the run() loop notices `running` flipping within a few seconds on
+        # its own, without touching the capture from outside its thread.
         self.running = False
 
     def get_latest_frame(self):
@@ -541,6 +547,8 @@ class CameraWorker(threading.Thread):
                 log.warning(f"[Camera {self.camera_id}] Read fail — reconnecting in 5 s…")
                 cap.release()
                 self._connected = False
+                if not self.running:
+                    break
                 time.sleep(5)
                 cap = self._open_capture(self.rtsp_url)
                 if cap is None:
@@ -615,6 +623,12 @@ class CameraWorker(threading.Thread):
         try:
             cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            # Bound how long a blocked read()/open() can hold this thread, so
+            # stop() (which only flips `running`) is noticed within a few
+            # seconds instead of potentially hanging on a dead connection —
+            # without touching this VideoCapture from another thread.
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
             if cap.isOpened():
                 log.info(f"[Camera {self.camera_id}] Stream opened (TCP via env var).")
                 return cap
@@ -871,6 +885,12 @@ class CameraManager:
         w = self._workers.pop(camera_id, None)
         if w:
             w.stop()
+            w.join(timeout=10)
+            if w.is_alive():
+                log.warning(
+                    f"[CameraManager] Camera {camera_id} worker did not exit "
+                    f"within 10s — its thread may be leaked."
+                )
 
     def stop_all(self):
         for cid in list(self._workers):

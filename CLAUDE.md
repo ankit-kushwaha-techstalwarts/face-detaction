@@ -127,6 +127,39 @@ Role hierarchy is `guard` (1) < `manager` (2) < `admin` (3), defined as
 decorators. `app.py` re-implements the same guard/decorators inline rather than
 importing from `app/middleware.py`.
 
+## Production server setup (nginx + systemd)
+
+The app runs behind **nginx** as a reverse proxy. The setup on this server:
+
+- **gunicorn** binds to `0.0.0.0:5443` with SSL (`cert.pem`/`key.pem`) — serves HTTPS directly.
+- **nginx** listens on ports 80 and 443, proxying to `https://127.0.0.1:5443` with
+  `proxy_ssl_verify off` (self-signed cert). Config: `/etc/nginx/sites-available/faceattend`.
+- The app is managed as a **systemd service**: `/etc/systemd/system/faceattend.service`.
+  It auto-starts on boot and auto-restarts on crash.
+
+### Managing the service
+
+```bash
+sudo systemctl start faceattend      # start
+sudo systemctl stop faceattend       # stop
+sudo systemctl restart faceattend    # restart
+sudo systemctl status faceattend     # check status
+sudo journalctl -u faceattend -f     # live logs
+```
+
+`/etc/sudoers.d/frapp-ops` grants passwordless sudo for nginx and systemd
+faceattend commands — no password needed for the above.
+
+### If bad gateway occurs
+
+1. Check if the service is running: `sudo systemctl status faceattend`
+2. If stopped: `sudo systemctl start faceattend`
+3. Check nginx is proxying to port 5443 (not 5000): `grep proxy_pass /etc/nginx/sites-available/faceattend`
+4. Reload nginx if config was changed: `sudo systemctl reload nginx`
+
+**Never use `./run.sh` to start the app in production** — use systemctl.
+`run.sh` is for development only; it conflicts with the systemd service.
+
 ## Cloud sync (`sync_agent.py`)
 
 A daemon thread started from `create_app()` when the `sync_enabled` setting is
